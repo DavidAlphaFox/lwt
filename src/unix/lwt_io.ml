@@ -498,7 +498,7 @@ let () =
 
 let no_seek _pos _cmd =
   Lwt.fail (Failure "Lwt_io.seek: seek not supported on this channel")
-
+(* 封装成channel *)
 let make :
     type m.
     ?buffer : Lwt_bytes.t ->
@@ -510,7 +510,7 @@ let make :
     fun ?buffer ?(close=Lwt.return) ?(seek=no_seek) ~mode perform_io ->
   let (buffer, size) =
     match buffer with
-    | Some buffer ->
+    | Some buffer -> (* buffer 存在 *)
       check_buffer "Lwt_io.make" buffer;
       (buffer, Lwt_bytes.length buffer)
     | None ->

@@ -103,13 +103,13 @@ open Lwt_unix
 
 external stub_read : Unix.file_descr -> t -> int -> int -> int = "lwt_unix_bytes_read"
 external read_job : Unix.file_descr -> t -> int -> int -> int job = "lwt_unix_bytes_read_job"
-
+(* 读取fd，在perform_io中被柯里化 *)
 let read fd buf pos len =
   if pos < 0 || len < 0 || pos > length buf - len then
     invalid_arg "Lwt_bytes.read"
   else
     blocking fd >>= function
-    | true ->
+    | true -> (* 阻塞模式下 *)
       wait_read fd >>= fun () ->
       run_job (read_job (unix_file_descr fd) buf pos len)
     | false ->

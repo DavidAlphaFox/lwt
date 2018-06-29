@@ -519,7 +519,7 @@ let rec retry_syscall node event ch wakener action =
     end
 
 let dummy = Lwt_sequence.add_r ignore (Lwt_sequence.create ())
-
+(* 注册事件 *)
 let register_action event ch action =
   let waiter, wakener = Lwt.task () in
   match event with
