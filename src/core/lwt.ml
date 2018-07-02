@@ -105,7 +105,7 @@
    all identifiers related to storage contain "storage."
 
 
-   1. Promises
+   1. Promises 核心机制依然是promise，将异步任务对列化
 
    A promise is a cell that can be in one of two states: "resolved" or
    "pending."
@@ -123,7 +123,7 @@
      - The other way is to resolve a promise that started out pending.
 
      Note that rejected promises have nothing to do with unhandled exceptions.
-
+    默认不处理未知异常
    - Pending promises
 
      ...are those that may become resolved in the future. Each pending promise
@@ -188,7 +188,7 @@
 
 
    4. Resolution loop
-
+   来解决等待中的任务
    Resolving a pending promise triggers its callbacks, and those might resolve
    more pending promises, triggering more callbacks, etc. This behavior is the
    *resolution loop*. Lwt has some machinery to avoid stack overflow and other
@@ -251,7 +251,7 @@
 
 
    6. No I/O
-
+   核心代码并不和IO绑定
    The Lwt core deliberately doesn't do I/O. The resolution loop stops running
    once no promises can be resolved immediately. It has to be restarted later
    by some surrouding I/O loop. This I/O loop typically keeps track of pending
@@ -560,7 +560,7 @@ struct
   type _ packed_promise =
     | Internal : ('a, _, _) promise -> 'a packed_promise
     [@@ocaml.unboxed]
-
+  (* 转化为内部promise *)
   let to_internal_promise (p : 'a t) : 'a packed_promise =
     Internal (Obj.magic p)
   let to_internal_resolver (r : 'a u) : 'a packed_promise =
@@ -3037,10 +3037,10 @@ struct
 
   let wakeup_paused () =
     if Lwt_sequence.is_empty paused then
-      paused_count := 0
+      paused_count := 0 (* Lwt_sequence 是空的 *)
     else begin
       let tmp = Lwt_sequence.create () in
-      Lwt_sequence.transfer_r paused tmp;
+      Lwt_sequence.transfer_r paused tmp; (* 创建一个新的seq，并将以前包含数据的seq和这个新的seq进行交换 *)
       paused_count := 0;
       Lwt_sequence.iter_l (fun r -> wakeup r ()) tmp
     end

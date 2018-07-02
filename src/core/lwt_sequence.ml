@@ -42,11 +42,11 @@ let remove node =
    | Operations on sequences                                         |
    +-----------------------------------------------------------------+ *)
 
-let create () =
+let create () = (* seq 是一个双向连表 *)
   let rec seq = { prev = seq; next = seq } in
   seq
 
-let is_empty seq = seq.next == seq
+let is_empty seq = seq.next == seq (* seq的下一个节点指向自己的时候，那么该seq就是空的 *)
 
 let length seq =
   let rec loop curr len =

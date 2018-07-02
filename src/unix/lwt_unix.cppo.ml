@@ -480,7 +480,7 @@ let rec retry_syscall node event ch wakener action =
   let res =
     try
       check_descriptor ch;
-      Success(action ())
+      Success(action ()) 
     with
     | Retry
     | Unix.Unix_error((Unix.EAGAIN | Unix.EWOULDBLOCK | Unix.EINTR), _, _)
@@ -497,10 +497,10 @@ let rec retry_syscall node event ch wakener action =
       Exn e
   in
   match res with
-  | Success v ->
-    Lwt_sequence.remove !node;
-    stop_events ch;
-    Lwt.wakeup wakener v
+  | Success v -> 
+    Lwt_sequence.remove !node; (* 如果操作成功了，从队列上删除节点 *)
+    stop_events ch; (* 如果操作成功了，停止事件 *)
+    Lwt.wakeup wakener v (* 唤醒等待者 *)
   | Exn e ->
     Lwt_sequence.remove !node;
     stop_events ch;
@@ -517,14 +517,14 @@ let rec retry_syscall node event ch wakener action =
         node := Lwt_sequence.add_r (fun () -> retry_syscall node Write ch wakener action) ch.hooks_writable;
         register_writable ch
     end
-
+(*  *)
 let dummy = Lwt_sequence.add_r ignore (Lwt_sequence.create ())
 (* 注册事件 *)
 let register_action event ch action =
-  let waiter, wakener = Lwt.task () in
+  let waiter, wakener = Lwt.task () in (*创建一个promise，返回的是一个promise和一个resolver*)
   match event with
   | Read ->
-    let node = ref dummy in
+    let node = ref dummy in (* 在channel的读队列上添加读操作 *)
     node := Lwt_sequence.add_r (fun () -> retry_syscall node Read ch wakener action) ch.hooks_readable;
     Lwt.on_cancel waiter (fun () -> Lwt_sequence.remove !node; stop_events ch);
     register_readable ch;
@@ -538,9 +538,9 @@ let register_action event ch action =
 
 (* Wraps a system call *)
 let wrap_syscall event ch action =
-  check_descriptor ch;
+  check_descriptor ch; (* 检查是否是句柄 *)
   Lazy.force ch.blocking >>= fun blocking ->
-  try
+  try (* 非阻塞，写请求的情况下当前状态可写，读请求下当前状态可读，就可以返回，否则去注册事件 *)
     if not blocking || (event = Read && unix_readable ch.fd) || (event = Write && unix_writable ch.fd) then
       Lwt.return (action ())
     else
@@ -1501,8 +1501,8 @@ type socket_type =
 type sockaddr = Unix.sockaddr = ADDR_UNIX of string | ADDR_INET of inet_addr * int
 
 let socket dom typ proto =
-  let s = Unix.socket dom typ proto in
-  mk_ch ~blocking:false s
+  let s = Unix.socket dom typ proto in (*创建socket句柄*)
+  mk_ch ~blocking:false s (* 封装到channel内*)
 
 type shutdown_command =
   Unix.shutdown_command =
@@ -1527,7 +1527,7 @@ let socketpair dom typ proto =
   let (s1, s2) = do_socketpair dom typ proto in
   (mk_ch ~blocking:false s1, mk_ch ~blocking:false s2)
 
-let accept ch =
+let accept ch = (* 对与accept到的fd，立刻设置为非阻塞模式 *)
   wrap_syscall Read ch (fun _ -> let (fd, addr) = Unix.accept ch.fd in (mk_ch ~blocking:false fd, addr))
 
 let accept_n ch n =
