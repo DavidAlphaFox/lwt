@@ -548,9 +548,9 @@ let wrap_syscall event ch action =
   with
   | Retry
   | Unix.Unix_error((Unix.EAGAIN | Unix.EWOULDBLOCK | Unix.EINTR), _, _)
-  | Sys_blocked_io ->
+  | Sys_blocked_io -> (* A special case of Sys_error raised when no I/O is possible on a non-blocking I/O channel.  *)
     (* The action could not be completed immediately, register it: *)
-    register_action event ch action
+    register_action event ch action (* 如果返回了Unix相关错，立刻在事件处理器上进行注册 *)
   | Retry_read ->
     register_action Read ch action
   | Retry_write ->
