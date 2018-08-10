@@ -1369,8 +1369,8 @@ struct
      behavior: it runs callbacks directly on the current stack. It should
      therefore be possible to cause a stack overflow using this function. *)
   let wakeup_general api_function_name r result =
-    let Internal p = to_internal_resolver r in
-    let p = underlying p in
+    let Internal p = to_internal_resolver r in (* 转化为内部的promise *)
+    let p = underlying p in (* 得到最下层的promise *)
 
     match p.state with
     | Rejected Canceled ->
@@ -1571,7 +1571,7 @@ struct
   let wait () =
     let p = new_pending ~how_to_cancel:Not_cancelable in
     to_public_promise p, to_public_resolver p
-
+  (* 创建 t和u，t是promise，u是resolver *)
   let task () =
     let p = new_pending ~how_to_cancel:Cancel_this_promise in
     to_public_promise p, to_public_resolver p
