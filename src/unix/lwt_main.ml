@@ -23,7 +23,7 @@ let yield () = (Lwt.add_task_r [@ocaml.warning "-3"]) yielded
 let rec run t =
   (* Wakeup paused threads now. *)
   Lwt.wakeup_paused ();
-  match Lwt.poll t with
+  match Lwt.poll t with (* 获取t的状态 *)
   | Some x ->
     x
   | None ->
