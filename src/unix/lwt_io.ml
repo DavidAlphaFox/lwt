@@ -746,7 +746,7 @@ struct
         | End_of_file -> Lwt.return_none
         | exn -> Lwt.fail exn)
 
-  let read_line ic =
+  let read_line ic = (* 自动去掉CLRF *)
     let buf = Buffer.create 128 in
     let rec loop cr_read =
       Lwt.try_bind (fun _ -> read_char ic)

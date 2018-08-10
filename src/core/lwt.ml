@@ -1326,7 +1326,7 @@ struct
         !current_callback_nesting_depth
           >= default_maximum_callback_nesting_depth
       in
-
+        (* 超过最大回调最大层级，转化成异步任务放入队列 *)
       if should_defer then begin
         let immediate_result, deferred_callback, deferred_result =
           if_deferred () in
@@ -1818,7 +1818,7 @@ struct
 
   (* Maintainer's note: a lot of the code below can probably be deduplicated in
      some way, especially if assuming Flambda. *)
-
+  (* 会返回一个新的promise *)
   let bind p f =
     let Internal p = to_internal_promise p in
     let p = underlying p in
@@ -1895,7 +1895,7 @@ struct
     in
 
     match p.state with
-    | Fulfilled v ->
+    | Fulfilled v -> (* 如果已经填充完成了，那么直接调用callback *)
       run_callback_or_defer_it
         ~run_immediately_and_ensure_tail_call:true
         ~callback:(fun () -> f v)
