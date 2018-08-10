@@ -12,7 +12,7 @@ authors: [
 homepage: "https://github.com/ocsigen/lwt"
 doc: "https://ocsigen.org/lwt/manual/"
 bug-reports: "https://github.com/ocsigen/lwt/issues"
-license: "LGPL with OpenSSL linking exception"
+license: "MIT"
 dev-repo: "https://github.com/ocsigen/lwt.git"
 
 build: [
@@ -54,8 +54,4 @@ messages: [
     {camlp4:installed & !lwt_camlp4:installed}
   "For Lwt_log and Lwt_daemon, please install package lwt_log"
     {!lwt_log:installed}
-]
-post-messages: [
-  "Lwt 4.0.0 has made some breaking changes. See
-  https://github.com/ocsigen/lwt/issues/453"
 ]
