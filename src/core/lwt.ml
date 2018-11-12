@@ -95,8 +95,8 @@
    The Lwt interface ([lwt.mli]) provides one main mechanism, promises, and two
    "aspects," which are *not* necessary to understand the main mechanism
    promises, but they are still there:
-
-   - promise cancelation
+   promise的取消机制和序列化的存储机制
+   - promise cancelation  
    - sequence-associated storage
 
    If you are not interested in cancelation or storage, you can ignore these two
@@ -106,49 +106,49 @@
 
 
    1. Promises 核心机制依然是promise，将异步任务对列化
-
+   Promise 是一个单元，它可以处于 resolved 或者 pending的状态
    A promise is a cell that can be in one of two states: "resolved" or
    "pending."
 
    - Resolved promises
-
+     一个已解析的promise可以是fullfilled或者是rejected的，已解析的promise是不可变的
      A resolved promise is either "fulfilled" with a value, or "rejected" with
      an exception. The state of a resolved promise will never change again: a
      resolved promise is immutable. A resolved promise is basically equivalent
      to an [('a, exn) Pervasives.result]. Resolved promises are produced in two
      ways:
-
+      可以通过resturn和fail函数来产生处理结果
      - [Lwt.return], [Lwt.fail], and related functions, produce "trivial"
        promises that are resolved from the start.
      - The other way is to resolve a promise that started out pending.
-
+   
      Note that rejected promises have nothing to do with unhandled exceptions.
-    默认不处理未知异常
+     被rejected的promise默认不处理未知异常
    - Pending promises
-
+     等待中的promise可以有一系列的callback，这些callback可以通过bind来进行添加
      ...are those that may become resolved in the future. Each pending promise
      carries a list of callbacks. These callbacks are added by functions like
      [Lwt.bind], and called by Lwt if/when the promise is resolved. These
      callbacks typically end up resolving additional promises; see section
      "Resolution loop" below.
-
+     等待中的promise可以通过下面三种方式产生
      Pending promises are produced in three ways, according to how they can be
      resolved:
 
      - Initial promises
-
+       初始的promise，可以通过wait和task来产生，用户可以手动来解析这些promise
        ...are created by [Lwt.wait] and [Lwt.task]. The user of Lwt resolves
        these promises manually, through the resolvers returned by those
        functions.
 
      - Sequential composition
-      链式的解析
+       链式的解析，这种promise只能等待上一个promise被解决，用户是无法直接解析这种promise
        For example, [Lwt.bind]. These promises only are only resolved when the
        preceding sequence of promises resolves. The user cannot resolve these
        promises directly (but see the section on cancelation below).
 
      - Concurrent composition
-      并行的解析
+      并行的解析，通过join和choose进行选择，在所有或一个等待态的promise被解决之后，该promise会被解决，用户无法直接操作
        For example, [Lwt.join] or [Lwt.choose]. These promises are only resolved
        when all or one of a set of "preceding" promises resolve. The user cannot
        resolve these promises directly (but see the section on cancelation
@@ -160,40 +160,40 @@
    Resolvers are given to the user by [Lwt.wait] and [Lwt.task], and can be used
    by the user to resolve the corresponding promises. Note that this means the
    user only ever gets resolvers for initial promises.
-
+   resolver和promise是同一个对象，只是作为不同类型的参考导出
    Internally, resolvers are the exact same objects as the promises they
    resolve, even though the resolver is exposed as a reference of a different
    type by [lwt.mli]. For details on why, see section "Type system abuse" below.
 
 
    3. Callbacks
-
+   回调是被附加在等待态promise上的，只有promise被解决，这些回调才会被调用
    ...are attached by Lwt to pending promises, and are run by Lwt if/when those
    promises are resolved. These callbacks are not directly exposed through
    [lwt.mli] -- they are a low-level mechanism. For example, to implement
    [Lwt.bind p f], Lwt attaches a callback to [p] that does some internal Lwt
    book-keeping, and then calls [f] if [p] is fulfilled, and does something else
    if [p] is rejected.
-
+   回调有两种，一种是常规回调，一种是取消回调
    Callbacks come in two flavors: regular callbacks and cancel callbacks. The
    only material differences between them are that:
-
+   常规回调总是在promise被解决的时候进行调用，取消毁掉只有在promise被取消的时候才会被调用
    - regular callbacks are always called when a promise is resolved, but cancel
      callbacks are called, in addition, only if the promise is canceled, and
    - all cancel callbacks of a promise are called before any regular callback
      is called.
-
+   取消回调是先于普通毁掉被调用的
    Cancelation is a special case of resolution, in particular, a special case of
    rejection, but see the section on cancelation later below.
-
+   取消是一种特殊的解决机制
 
    4. Resolution loop
-   来解决等待中的任务
+   处理循环，解决一个等待的promise会触发它的回调，并且会引发更多的等待promise被解决并触发更多的回调
    Resolving a pending promise triggers its callbacks, and those might resolve
    more pending promises, triggering more callbacks, etc. This behavior is the
    *resolution loop*. Lwt has some machinery to avoid stack overflow and other
    unfortunate situations during this loop.
-
+   链式promise解决可以被认为是promise的依赖图，节点是promise，边是callback
    This chaining of promise resolutions through callbacks can be seen as a kind
    of promise dependency graph, in which the nodes are pending promises, and the
    edges are callbacks. During the resolution loop, Lwt starts at some initial
