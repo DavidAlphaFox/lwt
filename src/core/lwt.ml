@@ -417,10 +417,10 @@ struct
 
      The "underlying promise of [p]" is:
 
-     - [p], if [p] is itself underlying.
+     - [p], if [p] is itself underlying. 如果p是底层promise，则返回自身
      - Otherwise, [p] is a proxy and has state [Proxy p']. The underlying
-       promise of [p] is the underlying promise of [p'].
-
+       promise of [p] is the underlying promise of [p']. 如果这个promise依赖另一个promise，则返回底层的promise
+      这样一层一层找下去
      In other words, to find the underlying promise of a proxy, Lwt follows the
      [Proxy _] links to the end. *)
 
@@ -546,14 +546,14 @@ open Main_internal_types
 
 module Public_types =
 struct
-  type +'a t
-  type -'a u
+  type +'a t (* 向下转型，转向子类 *)
+  type -'a u (* 向上转型，转向父类 *)
   (* The contravariance of resolvers is, technically, unsound due to the
      existence of [Lwt.waiter_of_wakener]. That is why that function is
      deprecated. See
 
        https://github.com/ocsigen/lwt/issues/458 *)
-
+  (* 使用Obj.magic进行强制的转型 *)
   let to_public_promise : ('a, _, _) promise -> 'a t = Obj.magic
   let to_public_resolver : ('a, _, _) promise -> 'a u = Obj.magic
 
@@ -2634,7 +2634,7 @@ struct
 
   let choose ps =
     match count_resolved_promises_in ps with
-    | 0 ->
+    | 0 -> (* 需要进行resolved的数量 *)
       let p = new_pending ~how_to_cancel:(propagate_cancel_to_several ps) in
 
       let callback result =

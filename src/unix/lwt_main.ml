@@ -30,7 +30,7 @@ let rec run t =
     (* Call enter hooks. *)
     Lwt_sequence.iter_l (fun f -> f ()) enter_iter_hooks;
     (* Do the main loop call. *)
-    Lwt_engine.iter (Lwt.paused_count () = 0 && Lwt_sequence.is_empty yielded);
+    Lwt_engine.iter (Lwt.paused_count () = 0 && Lwt_sequence.is_empty yielded);(*没有任何任务的时候，引擎会阻塞等待*)
     (* Wakeup paused threads again. *)
     Lwt.wakeup_paused ();
     (* Wakeup yielded threads now. *)
