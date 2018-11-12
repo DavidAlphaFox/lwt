@@ -142,13 +142,13 @@
        functions.
 
      - Sequential composition
-
+      链式的解析
        For example, [Lwt.bind]. These promises only are only resolved when the
        preceding sequence of promises resolves. The user cannot resolve these
        promises directly (but see the section on cancelation below).
 
      - Concurrent composition
-
+      并行的解析
        For example, [Lwt.join] or [Lwt.choose]. These promises are only resolved
        when all or one of a set of "preceding" promises resolve. The user cannot
        resolve these promises directly (but see the section on cancelation
@@ -376,7 +376,7 @@ module Storage_map =
       let compare = compare
     end)
 type storage = (unit -> unit) Storage_map.t
-
+(* storage存储的是函数 *)
 
 
 module Main_internal_types =
@@ -1256,7 +1256,7 @@ struct
      the callbacks that will be run will modify the storage. The storage is
      restored to the snapshot when the resolution loop is exited. *)
   let enter_resolution_loop () =
-    current_callback_nesting_depth := !current_callback_nesting_depth + 1;
+    current_callback_nesting_depth := !current_callback_nesting_depth + 1; (* 更新callback的深度 *)
     let storage_snapshot = !current_storage in
     storage_snapshot
 
@@ -1305,10 +1305,10 @@ struct
         run_callbacks callbacks result)
 
   let resolve ?allow_deferring ?maximum_callback_nesting_depth p result =
-    let Pending callbacks = p.state in
-    let p = set_promise_state p result in
+    let Pending callbacks = p.state in (* 获取所有 callbacks *)
+    let p = set_promise_state p result in (* 更新promise的状态 *)
 
-    run_callbacks_or_defer_them
+    run_callbacks_or_defer_them (* 执行callbacks *)
       ?allow_deferring ?maximum_callback_nesting_depth callbacks result;
 
     p
@@ -1326,7 +1326,7 @@ struct
         !current_callback_nesting_depth
           >= default_maximum_callback_nesting_depth
       in
-
+        (* 超过最大回调最大层级，转化成异步任务放入队列 *)
       if should_defer then begin
         let immediate_result, deferred_callback, deferred_result =
           if_deferred () in
@@ -1369,8 +1369,8 @@ struct
      behavior: it runs callbacks directly on the current stack. It should
      therefore be possible to cause a stack overflow using this function. *)
   let wakeup_general api_function_name r result =
-    let Internal p = to_internal_resolver r in
-    let p = underlying p in
+    let Internal p = to_internal_resolver r in (* 转化为内部的promise *)
+    let p = underlying p in (* 得到最下层的promise *)
 
     match p.state with
     | Rejected Canceled ->
@@ -1571,7 +1571,7 @@ struct
   let wait () =
     let p = new_pending ~how_to_cancel:Not_cancelable in
     to_public_promise p, to_public_resolver p
-
+  (* 创建 t和u，t是promise，u是resolver *)
   let task () =
     let p = new_pending ~how_to_cancel:Cancel_this_promise in
     to_public_promise p, to_public_resolver p
@@ -1818,7 +1818,7 @@ struct
 
   (* Maintainer's note: a lot of the code below can probably be deduplicated in
      some way, especially if assuming Flambda. *)
-
+  (* 会返回一个新的promise *)
   let bind p f =
     let Internal p = to_internal_promise p in
     let p = underlying p in
@@ -1895,7 +1895,7 @@ struct
     in
 
     match p.state with
-    | Fulfilled v ->
+    | Fulfilled v -> (* 如果已经填充完成了，那么直接调用callback *)
       run_callback_or_defer_it
         ~run_immediately_and_ensure_tail_call:true
         ~callback:(fun () -> f v)
@@ -3041,8 +3041,8 @@ struct
     else begin
       let tmp = Lwt_sequence.create () in
       Lwt_sequence.transfer_r paused tmp; (* 创建一个新的seq，并将以前包含数据的seq和这个新的seq进行交换 *)
-      paused_count := 0;
-      Lwt_sequence.iter_l (fun r -> wakeup r ()) tmp
+      paused_count := 0; 
+      Lwt_sequence.iter_l (fun r -> wakeup r ()) tmp (* 遍历seq，唤醒所有 *)
     end
 
   let register_pause_notifier f = pause_hook := f

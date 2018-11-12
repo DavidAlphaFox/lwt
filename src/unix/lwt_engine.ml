@@ -337,7 +337,7 @@ class virtual select_based = object(self)
     let fds_r = Fd_map.fold (fun fd _ l -> fd :: l) wait_readable [] in
     let fds_w = Fd_map.fold (fun fd _ l -> fd :: l) wait_writable [] in
     (* Compute the timeout. *)
-    let timeout = if block then get_next_timeout sleep_queue else 0. in
+    let timeout = if block then get_next_timeout sleep_queue else 0. in  (*如果外部队列没有任何等待的任务，这个队列会一直阻塞到最近一次唤醒*)
     (* Do the blocking call *)
     let fds_r, fds_w =
       try
