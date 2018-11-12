@@ -788,7 +788,7 @@ struct
     let id = !next_key_id in
     next_key_id := id + 1;
     {id = id; value = None}
-
+  (* 可变的存储，本身就是一个Map *)
   let current_storage = ref Storage_map.empty
 
   let get key =
@@ -1317,7 +1317,7 @@ struct
       ?(run_immediately_and_ensure_tail_call = false)
       ~callback:f
       ~if_deferred =
-
+    (* 立刻进行解决时候，直接调用f函数 *)
     if run_immediately_and_ensure_tail_call then
       f ()
 
@@ -1820,8 +1820,8 @@ struct
      some way, especially if assuming Flambda. *)
   (* 会返回一个新的promise *)
   let bind p f =
-    let Internal p = to_internal_promise p in
-    let p = underlying p in
+    let Internal p = to_internal_promise p in (* 先转化为内部的promise *)
+    let p = underlying p in (* 找到最底层的promise *)
 
     (* In case [Lwt.bind] needs to defer the call to [f], this function will be
        called to create:
@@ -1831,11 +1831,11 @@ struct
 
        [Lwt.bind] defers the call to [f] in two circumstances:
 
-       1. The promise [p] is pending.
+       1. The promise [p] is pending. promise是等待状态
        2. The promise [p] is fulfilled, but the current callback call nesting
           depth is such that the call to [f] must go into the callback queue, in
           order to avoid stack overflow.
-
+      promise已经成功填充并解决，但是这个callback会引起深度嵌套，导致堆栈溢出
       Mechanism (2) is currently disabled, to emulate pre-3.2.0 Lwt semantics.
       It will be enabled in Lwt 4.0.0.
 
@@ -1847,7 +1847,7 @@ struct
     let create_result_promise_and_callback_if_deferred () =
       let p'' = new_pending ~how_to_cancel:(Propagate_cancel_to_one p) in
       (* The result promise is a fresh pending promise.
-
+        尝试取消这个新的等待promise，会通过依赖图进行传播，如果是fulfiiled，lwt会触发用户的回调创建出一个p'，这个p'会是p''的代理
          Initially, trying to cancel this fresh pending promise [p''] will
          propagate the cancelation attempt to [p] (backwards through the promise
          dependency graph). If/when [p] is fulfilled, Lwt will call the user's
@@ -1855,14 +1855,14 @@ struct
          will become a proxy of [p'']. At that point, trying to cancel [p'']
          will be equivalent to trying to cancel [p'], so the behavior will
          depend on how the user obtained [p']. *)
-
+      (* 获取当前存储 *)
       let saved_storage = !current_storage in
-
-      let callback p_result =
+      (* p'' 关联的回调函数  *)
+      let callback p_result = 
         match p_result with
         | Fulfilled v ->
           current_storage := saved_storage;
-
+          (* p' 是函数f处理的返回 *)
           let p' = try f v with exn -> fail exn in
           let Internal p' = to_internal_promise p' in
           (* Run the user's function [f]. *)
@@ -1899,8 +1899,8 @@ struct
       run_callback_or_defer_it
         ~run_immediately_and_ensure_tail_call:true
         ~callback:(fun () -> f v)
-        ~if_deferred:(fun () ->
-          let (p'', callback) =
+        ~if_deferred:(fun () -> (* 如果需要延迟解决，则会返回p''和callback，以及p的状态*)
+          let (p'', callback) = 
             create_result_promise_and_callback_if_deferred () in
           (p'', callback, p.state))
 
