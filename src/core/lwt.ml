@@ -399,7 +399,7 @@ struct
 
 
   (* Promises proper. *)
-
+  (* promise 的原型，它内部只有一个可变的state *)
   type ('a, 'u, 'c) promise = {
     mutable state : ('a, 'u, 'c) state;
   }
@@ -414,7 +414,7 @@ struct
 
      A promise whose state is [Proxy _] is a "proxy" promise. A promise whose
      state is *not* [Proxy _] is an "underlying" promise.
-
+     不是 Proxy 的promise是一个最基本的promise
      The "underlying promise of [p]" is:
 
      - [p], if [p] is itself underlying. 如果p是底层promise，则返回自身
@@ -632,7 +632,7 @@ struct
       (type u)
       (type c)
       (p : ('a, u, c) promise) ->
-
+    (* 检查这个promise是什么样子，如果是Proxy的Promise，就逐层更新 *)
     match p.state with
     | Fulfilled _ -> (p : (_, underlying, _) promise)
     | Rejected _ -> p
@@ -1791,7 +1791,7 @@ struct
       | Fulfilled _ ->
         resolve ~allow_deferring:false outer_promise p'.state
       | Rejected _ ->
-        resolve ~allow_deferring:false outer_promise p'.state
+        resolve ~allow_deferring:false outer_promise p'.statess
 
       | Pending p'_callbacks ->
         let Pending outer_callbacks = outer_promise.state in
@@ -1818,7 +1818,7 @@ struct
 
   (* Maintainer's note: a lot of the code below can probably be deduplicated in
      some way, especially if assuming Flambda. *)
-  (* 会返回一个新的promise *)
+  (* 接收一个Promise，一个函数，然后返回一个新的Promise *)
   let bind p f =
     let Internal p = to_internal_promise p in (* 先转化为内部的promise *)
     let p = underlying p in (* 找到最底层的promise *)
@@ -1847,7 +1847,7 @@ struct
     let create_result_promise_and_callback_if_deferred () =
       let p'' = new_pending ~how_to_cancel:(Propagate_cancel_to_one p) in
       (* The result promise is a fresh pending promise.
-        尝试取消这个新的等待promise，会通过依赖图进行传播，如果是fulfiiled，lwt会触发用户的回调创建出一个p'，这个p'会是p''的代理
+         新的promise是pending状态的promise，如果取消p''则传播性的取消p
          Initially, trying to cancel this fresh pending promise [p''] will
          propagate the cancellation attempt to [p] (backwards through the
          promise dependency graph). If/when [p] is fulfilled, Lwt will call the
@@ -2458,7 +2458,7 @@ sig
 end =
 struct
   external reraise : exn -> 'a = "%reraise"
-
+  (* 异步的执行一个函数任务 *))
   let async f =
     let p = try f () with exn -> fail exn in
     let Internal p = to_internal_promise p in
@@ -2991,7 +2991,7 @@ struct
     | Fulfilled _ -> false
     | Rejected _ -> false
     | Pending _ -> true
-
+  (* 查询promise的状态，找到最底层的promise的 *))
   let poll p =
     let Internal p = to_internal_promise p in
     match (underlying p).state with
