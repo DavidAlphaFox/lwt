@@ -95,13 +95,8 @@
    The Lwt interface ([lwt.mli]) provides one main mechanism, promises, and two
    "aspects," which are *not* necessary to understand the main mechanism
    promises, but they are still there:
-<<<<<<< HEAD
-   promise的取消机制和序列化的存储机制
-   - promise cancelation  
-=======
 
    - promise cancellation
->>>>>>> 02affbace9bdfd1763b4b499dda5215307c2791e
    - sequence-associated storage
 
    If you are not interested in cancellation or storage, you can ignore these
@@ -187,17 +182,10 @@
      callbacks are called, in addition, only if the promise is canceled, and
    - all cancel callbacks of a promise are called before any regular callback
      is called.
-<<<<<<< HEAD
-   取消回调是先于普通毁掉被调用的
-   Cancelation is a special case of resolution, in particular, a special case of
-   rejection, but see the section on cancelation later below.
-   取消是一种特殊的解决机制
-=======
 
    Cancellation is a special case of resolution, in particular, a special case
    of rejection, but see the section on cancellation later below.
 
->>>>>>> 02affbace9bdfd1763b4b499dda5215307c2791e
 
    4. Resolution loop
    处理循环，解决一个等待的promise会触发它的回调，并且会引发更多的等待promise被解决并触发更多的回调
