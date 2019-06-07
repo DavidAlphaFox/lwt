@@ -113,7 +113,7 @@ let suites = suites @ [trivial_promise_tests]
 
 
 (* Tests for promises created with [Lwt.wait] and [Lwt.task], not including
-   tests for cancelation of the latter. Tests for double use of [Lwt.wakeup]
+   tests for cancellation of the latter. Tests for double use of [Lwt.wakeup]
    and related functions are in a separated suite. So are tests for
    [Lwt.wakeup_later] and related functions. *)
 
@@ -237,7 +237,7 @@ let suites = suites @ [double_resolve_tests]
 
 
 (* Tests for sequential composition functions, such as [Lwt.bind], but not
-   including testing for interaction with cancelation and sequence-associated
+   including testing for interaction with cancellation and sequence-associated
    storage. Those tests come later. *)
 
 let bind_tests = suite "bind" [
@@ -1747,9 +1747,9 @@ let suites = suites @ [on_any_tests]
 
 
 
-(* Concurrent composition tests, not including cancelation and
+(* Concurrent composition tests, not including cancellation and
    sequence-associated storage. Also not including [Lwt.pick] and [Lwt.npick],
-   as those interact with cancelation. *)
+   as those interact with cancellation. *)
 
 let async_tests = suite "async" [
   test "fulfilled" begin fun () ->
@@ -1891,6 +1891,219 @@ let join_tests = suite "join" [
   end;
 ]
 let suites = suites @ [join_tests]
+
+let both_tests = suite "both" [
+  test "both fulfilled" begin fun () ->
+    let p = Lwt.both (Lwt.return 1) (Lwt.return 2) in
+    state_is (Lwt.Return (1, 2)) p
+  end;
+
+  test "all rejected" begin fun () ->
+    let p = Lwt.both (Lwt.fail Exception) (Lwt.fail Exit) in
+    state_is (Lwt.Fail Exception) p
+  end;
+
+  test "rejected, fulfilled" begin fun () ->
+    let p = Lwt.both (Lwt.fail Exception) (Lwt.return 2) in
+    state_is (Lwt.Fail Exception) p
+  end;
+
+  test "fulfilled, rejected" begin fun () ->
+    let p = Lwt.both (Lwt.return 1) (Lwt.fail Exception) in
+    state_is (Lwt.Fail Exception) p
+  end;
+
+  test "both pending" begin fun () ->
+    let p = Lwt.both (fst (Lwt.wait ())) (fst (Lwt.wait ())) in
+    state_is Lwt.Sleep p
+  end;
+
+  test "pending, fulfilled" begin fun () ->
+    let p = Lwt.both (fst (Lwt.wait ())) (Lwt.return 2) in
+    state_is Lwt.Sleep p
+  end;
+
+  test "pending, rejected" begin fun () ->
+    let p = Lwt.both (fst (Lwt.wait ())) (Lwt.fail Exception) in
+    state_is Lwt.Sleep p
+  end;
+
+  test "fulfilled, pending" begin fun () ->
+    let p = Lwt.both (Lwt.return 1) (fst (Lwt.wait ())) in
+    state_is Lwt.Sleep p
+  end;
+
+  test "rejected, pending" begin fun () ->
+    let p = Lwt.both (Lwt.fail Exception) (fst (Lwt.wait ())) in
+    state_is Lwt.Sleep p
+  end;
+
+  test "pending, fulfilled, then fulfilled" begin fun () ->
+    let p1, r1 = Lwt.wait () in
+    let p = Lwt.both p1 (Lwt.return 2) in
+    Lwt.wakeup_later r1 1;
+    state_is (Lwt.Return (1, 2)) p
+  end;
+
+  test "pending, rejected, then fulfilled" begin fun () ->
+    let p1, r1 = Lwt.wait () in
+    let p = Lwt.both p1 (Lwt.fail Exception) in
+    Lwt.wakeup_later r1 1;
+    state_is (Lwt.Fail Exception) p
+  end;
+
+  test "pending, fulfilled, then rejected" begin fun () ->
+    let p1, r1 = Lwt.wait () in
+    let p = Lwt.both p1 (Lwt.return 2) in
+    Lwt.wakeup_later_exn r1 Exception;
+    state_is (Lwt.Fail Exception) p
+  end;
+
+  test "pending, rejected, then rejected" begin fun () ->
+    let p1, r1 = Lwt.wait () in
+    let p = Lwt.both p1 (Lwt.fail Exception) in
+    Lwt.wakeup_later_exn r1 Exit;
+    state_is (Lwt.Fail Exception) p
+  end;
+
+  test "fulfilled, pending, then fulfilled" begin fun () ->
+    let p2, r2 = Lwt.wait () in
+    let p = Lwt.both (Lwt.return 1) p2 in
+    Lwt.wakeup_later r2 2;
+    state_is (Lwt.Return (1, 2)) p
+  end;
+
+  test "rejected, pending, then fulfilled" begin fun () ->
+    let p2, r2 = Lwt.wait () in
+    let p = Lwt.both (Lwt.fail Exception) p2 in
+    Lwt.wakeup_later r2 2;
+    state_is (Lwt.Fail Exception) p
+  end;
+
+  test "fulfilled, pending, then rejected" begin fun () ->
+    let p2, r2 = Lwt.wait () in
+    let p = Lwt.both (Lwt.return 1) p2 in
+    Lwt.wakeup_later_exn r2 Exception;
+    state_is (Lwt.Fail Exception) p
+  end;
+
+  test "rejected, pending, then rejected" begin fun () ->
+    let p2, r2 = Lwt.wait () in
+    let p = Lwt.both (Lwt.fail Exception) p2 in
+    Lwt.wakeup_later_exn r2 Exit;
+    state_is (Lwt.Fail Exception) p
+  end;
+
+  test "pending, then first fulfilled" begin fun () ->
+    let p1, r1 = Lwt.wait () in
+    let p = Lwt.both p1 (fst (Lwt.wait ())) in
+    Lwt.wakeup_later r1 1;
+    state_is Lwt.Sleep p
+  end;
+
+  test "pending, then first rejected" begin fun () ->
+    let p1, r1 = Lwt.wait () in
+    let p = Lwt.both p1 (fst (Lwt.wait ())) in
+    Lwt.wakeup_later_exn r1 Exception;
+    state_is Lwt.Sleep p
+  end;
+
+  test "pending, then second fulfilled" begin fun () ->
+    let p2, r2 = Lwt.wait () in
+    let p = Lwt.both (fst (Lwt.wait ())) p2 in
+    Lwt.wakeup_later r2 2;
+    state_is Lwt.Sleep p
+  end;
+
+  test "pending, then second rejected" begin fun () ->
+    let p2, r2 = Lwt.wait () in
+    let p = Lwt.both (fst (Lwt.wait ())) p2 in
+    Lwt.wakeup_later_exn r2 Exception;
+    state_is Lwt.Sleep p
+  end;
+
+  test "pending, then first fulfilled, then fulfilled" begin fun () ->
+    let p1, r1 = Lwt.wait () in
+    let p2, r2 = Lwt.wait () in
+    let p = Lwt.both p1 p2 in
+    Lwt.wakeup_later r1 1;
+    Lwt.wakeup_later r2 2;
+    state_is (Lwt.Return (1, 2)) p
+  end;
+
+  test "pending, then first fulfilled, then rejected" begin fun () ->
+    let p1, r1 = Lwt.wait () in
+    let p2, r2 = Lwt.wait () in
+    let p = Lwt.both p1 p2 in
+    Lwt.wakeup_later r1 1;
+    Lwt.wakeup_later_exn r2 Exception;
+    state_is (Lwt.Fail Exception) p
+  end;
+
+  test "pending, then first rejected, then fulfilled" begin fun () ->
+    let p1, r1 = Lwt.wait () in
+    let p2, r2 = Lwt.wait () in
+    let p = Lwt.both p1 p2 in
+    Lwt.wakeup_later_exn r1 Exception;
+    Lwt.wakeup_later r2 2;
+    state_is (Lwt.Fail Exception) p
+  end;
+
+  test "pending, then first rejected, then rejected" begin fun () ->
+    let p1, r1 = Lwt.wait () in
+    let p2, r2 = Lwt.wait () in
+    let p = Lwt.both p1 p2 in
+    Lwt.wakeup_later_exn r1 Exception;
+    Lwt.wakeup_later_exn r2 Exit;
+    state_is (Lwt.Fail Exception) p
+  end;
+
+test "pending, then second fulfilled, then fulfilled" begin fun () ->
+    let p1, r1 = Lwt.wait () in
+    let p2, r2 = Lwt.wait () in
+    let p = Lwt.both p1 p2 in
+    Lwt.wakeup_later r2 2;
+    Lwt.wakeup_later r1 1;
+    state_is (Lwt.Return (1, 2)) p
+  end;
+
+  test "pending, then second fulfilled, then rejected" begin fun () ->
+    let p1, r1 = Lwt.wait () in
+    let p2, r2 = Lwt.wait () in
+    let p = Lwt.both p1 p2 in
+    Lwt.wakeup_later r2 2;
+    Lwt.wakeup_later_exn r1 Exception;
+    state_is (Lwt.Fail Exception) p
+  end;
+
+  test "pending, then second rejected, then fulfilled" begin fun () ->
+    let p1, r1 = Lwt.wait () in
+    let p2, r2 = Lwt.wait () in
+    let p = Lwt.both p1 p2 in
+    Lwt.wakeup_later_exn r2 Exception;
+    Lwt.wakeup_later r1 1;
+    state_is (Lwt.Fail Exception) p
+  end;
+
+  test "pending, then second rejected, then rejected" begin fun () ->
+    let p1, r1 = Lwt.wait () in
+    let p2, r2 = Lwt.wait () in
+    let p = Lwt.both p1 p2 in
+    Lwt.wakeup_later_exn r2 Exception;
+    Lwt.wakeup_later_exn r1 Exit;
+    state_is (Lwt.Fail Exception) p
+  end;
+
+  test "diamond" begin fun () ->
+    let p1, r1 = Lwt.wait () in
+    let p = Lwt.both p1 p1 in
+    Lwt.bind (state_is Lwt.Sleep p) (fun was_pending ->
+    Lwt.wakeup_later r1 1;
+    Lwt.bind (state_is (Lwt.Return (1, 1)) p) (fun is_fulfilled ->
+    Lwt.return (was_pending && is_fulfilled)))
+  end;
+]
+let suites = suites @ [both_tests]
 
 let choose_tests = suite "choose" [
   test "empty" begin fun () ->
@@ -2060,7 +2273,7 @@ let nchoose_split_tests = suite "nchoose_split" [
     end [@ocaml.warning "-4"]
   end;
 
-  test "pending, rejected" begin fun () ->
+  test "pending, rejected 2" begin fun () ->
     let p, r = Lwt.wait () in
     let p = Lwt.nchoose_split [p; fst (Lwt.wait ())] in
     Lwt.wakeup_exn r Exception;
@@ -2260,7 +2473,7 @@ let suites = suites @ [wakeup_later_tests]
 
 
 
-(* Cancelation and its interaction with the rest of the API. *)
+(* Cancellation and its interaction with the rest of the API. *)
 
 let cancel_tests = suite "cancel" [
   test "fulfilled" begin fun () ->
@@ -2833,7 +3046,7 @@ let cancel_catch_tests = suite "cancel catch" [
   end;
 
   (* In [p' = Lwt.catch (fun () -> p) f], if [p] is cancelable, canceling [p']
-     propagates to [p], and then the cancelation exception can be "intercepted"
+     propagates to [p], and then the cancellation exception can be "intercepted"
      by [f], which can resolve [p'] in an arbitrary way. *)
   test "task, pending, canceled" begin fun () ->
     let saw = ref None in
@@ -2873,7 +3086,7 @@ let cancel_catch_tests = suite "cancel catch" [
        !on_cancel_2_ran = false)
   end;
 
-  (* Same as above, except this time, cancelation is passed on to the outer
+  (* Same as above, except this time, cancellation is passed on to the outer
      promise, so we can expect both cancel callbacks to run. *)
   test "task, pending, canceled, on_cancel, forwarded" begin fun () ->
     let on_cancel_2_ran = ref false in
@@ -3161,7 +3374,7 @@ let cancel_join_tests = suite "cancel join" [
 
   (* In [p' = Lwt.join [p; p]], if [p'] is canceled, the cancel handler on [p]
      is called only once, even though it is reachable by two paths in the
-     cancelation graph. *)
+     cancellation graph. *)
   test "cancel diamond" begin fun () ->
     let ran = ref 0 in
     let p, _ = Lwt.task () in
@@ -3573,6 +3786,50 @@ let suites = suites @ [infix_operator_tests]
 
 
 
+(* Like the infix operator tests, these just check that the necessary functions
+   exist in Lwt.Infix.Let_syntax, and do roughly what they should. We are not
+   testing the full syntax to avoid large dependencies for the test suite. *)
+let ppx_let_tests = suite "ppx_let" [
+  test "return" begin fun () ->
+    let p = Lwt.Infix.Let_syntax.return () in
+    state_is (Lwt.Return ()) p
+  end;
+
+  test "map" begin fun () ->
+    let p = Lwt.Infix.Let_syntax.map (Lwt.return 1) ~f:(fun x -> x + 1) in
+    state_is (Lwt.Return 2) p
+  end;
+
+  test "bind" begin fun () ->
+    let p =
+      Lwt.Infix.Let_syntax.bind
+        (Lwt.return 1) ~f:(fun x -> Lwt.return (x + 1))
+    in
+    state_is (Lwt.Return 2) p
+  end;
+
+  test "both" begin fun () ->
+    let p = Lwt.both (Lwt.return 1) (Lwt.return 2) in
+    state_is (Lwt.Return (1, 2)) p
+  end;
+
+  test "Open_on_rhs" begin fun () ->
+    let module Local =
+      struct
+        module type Empty =
+        sig
+        end
+      end
+    in
+    let x : (module Local.Empty) = (module Lwt.Infix.Let_syntax.Open_on_rhs) in
+    ignore x;
+    Lwt.return true
+  end;
+]
+let suites = suites @ [ppx_let_tests]
+
+
+
 (* Tests for [Lwt.add_task_l] and [Lwt.add_task_r]. *)
 
 let lwt_sequence_contains sequence list =
@@ -3825,7 +4082,7 @@ let suites = suites @ [make_value_and_error_tests]
 
 
 (* These tests exercise the callback cleanup mechanism of the Lwt core, which is
-   an implementation detail. When a promise [p] is repeatedly used in fuctions
+   an implementation detail. When a promise [p] is repeatedly used in functions
    such as [Lwt.choose], but remains pending, while other promises passed to
    [Lwt.choose] resolve, [p] accumulates disabled callback cells. They need to
    be occasionally cleaned up; in particular, this should happen every

@@ -681,6 +681,10 @@ struct
 
   let create () = {prefix = []; reversed_suffix = []; count = 0}
 
+  let byte_count {prefix; reversed_suffix; _} =
+    let count_buff = List.fold_left (fun acc {length; _} -> acc + length) 0 in
+    count_buff prefix + count_buff reversed_suffix
+
   let append io_vectors io_vector =
     io_vectors.reversed_suffix <- io_vector::io_vectors.reversed_suffix;
     io_vectors.count <- io_vectors.count + 1
@@ -1554,7 +1558,7 @@ let accept_n ch n =
 
 let connect ch addr =
   if Sys.win32 then
-    (* [in_progress] tell wether connection has started but not
+    (* [in_progress] tell whether connection has started but not
        terminated: *)
     let in_progress = ref false in
     wrap_syscall Write ch begin fun () ->
@@ -1579,13 +1583,13 @@ let connect ch addr =
           raise Retry
     end
   else
-    (* [in_progress] tell wether connection has started but not
+    (* [in_progress] tell whether connection has started but not
        terminated: *)
     let in_progress = ref false in
     wrap_syscall Write ch begin fun () ->
       if !in_progress then
         (* If the connection is in progress, [getsockopt_error] tells
-           wether it succceed: *)
+           whether it succceed: *)
         match Unix.getsockopt_error ch.fd with
         | None ->
           (* The socket is connected *)

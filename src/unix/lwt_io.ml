@@ -96,7 +96,7 @@ and 'mode _channel = {
   abort_wakener : int Lwt.u;
 
   mutable auto_flushing : bool;
-  (* Wether the auto-flusher is currently running or not *)
+  (* Whether the auto-flusher is currently running or not *)
 
   main : 'mode channel;
   (* The main wrapper *)
@@ -493,7 +493,7 @@ let flush_all () =
     wrappers
 
 let () =
-  (* Flush all opened ouput channels on exit: *)
+  (* Flush all opened output channels on exit: *)
   Lwt_main.at_exit flush_all
 
 let no_seek _pos _cmd =
@@ -545,7 +545,7 @@ let make :
    | Output -> Outputs.add outputs wrapper);
   wrapper
 
-let of_bytes ~mode bytes =
+let of_bytes (type m) ~(mode : m mode) bytes =
   let length = Lwt_bytes.length bytes in
   let abort_waiter, abort_wakener = Lwt.wait () in
   let rec ch = {
@@ -561,7 +561,9 @@ let of_bytes ~mode bytes =
        trying to launch the auto-fllushed. *)
     auto_flushing = true;
     mode = mode;
-    offset = 0L;
+    offset = (match mode with
+        | Output -> 0L
+        | Input -> Int64.of_int length);
     typ = Type_bytes;
   } and wrapper = {
     state = Idle;
@@ -1060,11 +1062,9 @@ struct
            and v1 = get buffer (ptr + pos32_1)
            and v2 = get buffer (ptr + pos32_2)
            and v3 = get buffer (ptr + pos32_3) in
-           let v = v0 lor (v1 lsl 8) lor (v2 lsl 16) lor (v3 lsl 24) in
-           if v3 land 0x80 = 0 then
-             Lwt.return v
-           else
-             Lwt.return (v - (1 lsl 32)))
+           let n3 = if v3 >= 128 then v3 - 256 else v3 in
+           let v = v0 + (v1 lsl 8) + (v2 lsl 16) + (n3 lsl 24) in
+           Lwt.return v)
 
     let read_int16 ic =
       read_block_unsafe ic 2

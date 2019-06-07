@@ -95,14 +95,19 @@
    The Lwt interface ([lwt.mli]) provides one main mechanism, promises, and two
    "aspects," which are *not* necessary to understand the main mechanism
    promises, but they are still there:
+<<<<<<< HEAD
    promise的取消机制和序列化的存储机制
    - promise cancelation  
+=======
+
+   - promise cancellation
+>>>>>>> 02affbace9bdfd1763b4b499dda5215307c2791e
    - sequence-associated storage
 
-   If you are not interested in cancelation or storage, you can ignore these two
-   complications, and still get a pretty good understanding of the code. To
-   help, all identifiers related to cancelation contain the string "cancel," and
-   all identifiers related to storage contain "storage."
+   If you are not interested in cancellation or storage, you can ignore these
+   two complications, and still get a pretty good understanding of the code. To
+   help, all identifiers related to cancellation contain the string "cancel,"
+   and all identifiers related to storage contain "storage."
 
 
    1. Promises 核心机制依然是promise，将异步任务对列化
@@ -145,13 +150,13 @@
        链式的解析，这种promise只能等待上一个promise被解决，用户是无法直接解析这种promise
        For example, [Lwt.bind]. These promises only are only resolved when the
        preceding sequence of promises resolves. The user cannot resolve these
-       promises directly (but see the section on cancelation below).
+       promises directly (but see the section on cancellation below).
 
      - Concurrent composition
       并行的解析，通过join和choose进行选择，在所有或一个等待态的promise被解决之后，该promise会被解决，用户无法直接操作
        For example, [Lwt.join] or [Lwt.choose]. These promises are only resolved
        when all or one of a set of "preceding" promises resolve. The user cannot
-       resolve these promises directly (but see the section on cancelation
+       resolve these promises directly (but see the section on cancellation
        below).
 
 
@@ -182,10 +187,17 @@
      callbacks are called, in addition, only if the promise is canceled, and
    - all cancel callbacks of a promise are called before any regular callback
      is called.
+<<<<<<< HEAD
    取消回调是先于普通毁掉被调用的
    Cancelation is a special case of resolution, in particular, a special case of
    rejection, but see the section on cancelation later below.
    取消是一种特殊的解决机制
+=======
+
+   Cancellation is a special case of resolution, in particular, a special case
+   of rejection, but see the section on cancellation later below.
+
+>>>>>>> 02affbace9bdfd1763b4b499dda5215307c2791e
 
    4. Resolution loop
    处理循环，解决一个等待的promise会触发它的回调，并且会引发更多的等待promise被解决并触发更多的回调
@@ -207,23 +219,23 @@
    callback to resolve another initial promise. All the explicit dependencies
    are created by Lwt's own sequential and concurrent composition functions
    (so, [Lwt.bind], [Lwt.join], etc). Whether dependencies are explicit or not
-   is relevant only to cancelation.
+   is relevant only to cancellation.
 
 
-   5. Cancelation
+   5. Cancellation
 
    As described above, ordinary promise resolution proceeds from an initial
    promise, forward along callbacks through the dependency graph. Since it
    starts from an initial promise, it can only be triggered using a resolver.
 
-   Cancelation is a sort of dual to ordinary resolution. Instead of starting at
-   an initial promise/resolver, cancelation starts at *any* promise. It then
+   Cancellation is a sort of dual to ordinary resolution. Instead of starting at
+   an initial promise/resolver, cancellation starts at *any* promise. It then
    goes *backwards* through the explicit dependency graph, looking for
    cancelable initial promises to cancel -- those that were created by
-   [Lwt.task]. After finding them, cancelation resolves them normally with
+   [Lwt.task]. After finding them, cancellation resolves them normally with
    [Rejected Lwt.Canceled], causing an ordinary promise resolution process.
 
-   To summarize, cancelation is a way to trigger an *ordinary* resolution of
+   To summarize, cancellation is a way to trigger an *ordinary* resolution of
    promises created with [Lwt.task], by first searching for them in the promise
    dependency graph (which is assembled by [Lwt.bind], [Lwt.join], etc).
 
@@ -244,7 +256,7 @@
    susceptible to being canceled by [Lwt.cancel], but the user can manually
    cancel initial promises created by both [Lwt.task] and [Lwt.wait].
 
-   Due to [Lwt.cancel], promise cancelation, and therefore resolution, can be
+   Due to [Lwt.cancel], promise cancellation, and therefore resolution, can be
    initiated by the user without access to a resolver. This is important for
    reasoning about state changes in the implementation of Lwt, and is referenced
    in some implementation detail comments.
@@ -254,7 +266,7 @@
    核心代码并不和IO绑定
    The Lwt core deliberately doesn't do I/O. The resolution loop stops running
    once no promises can be resolved immediately. It has to be restarted later
-   by some surrouding I/O loop. This I/O loop typically keeps track of pending
+   by some surrounding I/O loop. This I/O loop typically keeps track of pending
    promises that represent blocked or in-progress I/O; other pending promises
    that indirectly depend on I/O are not explicitly tracked. They are retained
    in memory by references captured inside callbacks.
@@ -493,7 +505,7 @@ struct
        memory representation.
 
      - As per the Overview, there are regular callbacks and cancel callbacks.
-       Cancel callbacks are called only on cancelation, and, then, before any
+       Cancel callbacks are called only on cancellation, and, then, before any
        regular callbacks are called.
 
        Despite the different types for the two kinds of callbacks, they are
@@ -698,7 +710,7 @@ struct
      They do not return a corresponding resolver. That means that only the
      function itself (typically, a callback registered by it) can resolve [p].
      The only thing the user can do directly is try to cancel [p], but, since
-     [p] is not an initial promise, the cancelation attempt simply propagates
+     [p] is not an initial promise, the cancellation attempt simply propagates
      past [p] to [p]'s predecessors. If that eventually results in canceling
      [p], it will be through the normal mechanisms of the function (e.g.
      [Lwt.bind]'s callback).
@@ -1376,9 +1388,9 @@ struct
     | Rejected Canceled ->
       ()
     | Fulfilled _ ->
-      Printf.ksprintf Pervasives.invalid_arg "Lwt.%s" api_function_name
+      Printf.ksprintf invalid_arg "Lwt.%s" api_function_name
     | Rejected _ ->
-      Printf.ksprintf Pervasives.invalid_arg "Lwt.%s" api_function_name
+      Printf.ksprintf invalid_arg "Lwt.%s" api_function_name
 
     | Pending _ ->
       let result = state_of_result result in
@@ -1397,9 +1409,9 @@ struct
     | Rejected Canceled ->
       ()
     | Fulfilled _ ->
-      Printf.ksprintf Pervasives.invalid_arg "Lwt.%s" api_function_name
+      Printf.ksprintf invalid_arg "Lwt.%s" api_function_name
     | Rejected _ ->
-      Printf.ksprintf Pervasives.invalid_arg "Lwt.%s" api_function_name
+      Printf.ksprintf invalid_arg "Lwt.%s" api_function_name
 
     | Pending _ ->
       let result = state_of_result result in
@@ -1435,8 +1447,8 @@ struct
        through the promise dependency graph.
 
        The callbacks of these initial promises are then run, in a separate
-       phase. These callbacks propagate cancelation forwards to any dependent
-       promises. See "Cancelation" in the Overview. *)
+       phase. These callbacks propagate cancellation forwards to any dependent
+       promises. See "Cancellation" in the Overview. *)
     let propagate_cancel : (_, _, _) promise -> packed_callbacks list =
         fun p ->
       let rec cancel_and_collect_callbacks :
@@ -1763,9 +1775,9 @@ struct
      becomes resolved probably are:
 
      - Promises have more behaviors than resolution. One would have to add a
-       cancelation handler to [~outer_promise] to propagate the cancelation back
-       to [~user_provided_promise], for example. It may be easier to just think
-       of them as the same promise.
+       cancellation handler to [~outer_promise] to propagate the cancellation
+       back to [~user_provided_promise], for example. It may be easier to just
+       think of them as the same promise.
      - If using callbacks, resolving [~user_provided_promise] would not
        immediately resolve [~outer_promise]. Another callback added to
        [~user_provided_promise] might see [~user_provided_promise] resolved,
@@ -1849,11 +1861,11 @@ struct
       (* The result promise is a fresh pending promise.
         尝试取消这个新的等待promise，会通过依赖图进行传播，如果是fulfiiled，lwt会触发用户的回调创建出一个p'，这个p'会是p''的代理
          Initially, trying to cancel this fresh pending promise [p''] will
-         propagate the cancelation attempt to [p] (backwards through the promise
-         dependency graph). If/when [p] is fulfilled, Lwt will call the user's
-         callback [f] below, which will provide a new promise [p'], and [p']
-         will become a proxy of [p'']. At that point, trying to cancel [p'']
-         will be equivalent to trying to cancel [p'], so the behavior will
+         propagate the cancellation attempt to [p] (backwards through the
+         promise dependency graph). If/when [p] is fulfilled, Lwt will call the
+         user's callback [f] below, which will provide a new promise [p'], and
+         [p'] will become a proxy of [p'']. At that point, trying to cancel
+         [p''] will be equivalent to trying to cancel [p'], so the behavior will
          depend on how the user obtained [p']. *)
       (* 获取当前存储 *)
       let saved_storage = !current_storage in
@@ -2445,6 +2457,7 @@ sig
   val async : (unit -> _ t) -> unit
   val ignore_result : _ t -> unit
 
+  val both : 'a t -> 'b t -> ('a * 'b) t
   val join : unit t list -> unit t
 
   val choose : 'a t list -> 'a t
@@ -2567,6 +2580,16 @@ struct
     in
 
     attach_callback_or_resolve_immediately ps
+
+  let both p1 p2 =
+    let v1 = ref None in
+    let v2 = ref None in
+    let p1' = bind p1 (fun v -> v1 := Some v; return_unit) in
+    let p2' = bind p2 (fun v -> v2 := Some v; return_unit) in
+    join [p1'; p2'] |> map (fun () ->
+      match !v1, !v2 with
+      | Some v1, Some v2 -> v1, v2
+      | _ -> assert false)
 
 
 
@@ -3061,6 +3084,18 @@ struct
   let (=|<) = map
   let (<&>) p p' = join [p; p']
   let (<?>) p p' = choose [p; p']
+
+  module Let_syntax =
+  struct
+    let return = return
+    let map t ~f = map f t
+    let bind t ~f = bind t f
+    let both = both
+
+    module Open_on_rhs =
+    struct
+    end
+  end
 end
 include Infix
 

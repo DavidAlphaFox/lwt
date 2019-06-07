@@ -14,13 +14,13 @@
     - removing an element while the sequence is being transversed.
 
    @deprecated This module should be an internal implementation detail of Lwt,
-   and may be removed from the API at some point in the future. Use any other
-   doubly-linked list library as an alternative.
+   and may be removed from the API at some point in the future. Use package
+   {{:https://github.com/mirage/lwt-dllist} [lwt-dllist]} instead.
 *)
 
 [@@@ocaml.deprecated
-" This module is an implementation detail of Lwt. See
-   https://github.com/ocsigen/lwt/issues/361"]
+" Use package lwt-dllist. See
+   https://github.com/mirage/lwt-dllist"]
 
 type 'a t
   (** Type of a sequence holding values of type ['a] *)
@@ -49,7 +49,7 @@ val is_empty : 'a t -> bool
   (** Returns [true] iff the given sequence is empty *)
 
 val length : 'a t -> int
-  (** Returns the number of elemenets in the given sequence. This is a
+  (** Returns the number of elements in the given sequence. This is a
       O(n) operation where [n] is the number of elements in the
       sequence. *)
 
