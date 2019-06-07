@@ -191,6 +191,10 @@ val is_busy : 'a channel -> bool
       busy. A channel is busy when there is at least one job using it
       that has not yet terminated. *)
 
+val is_closed : 'a channel -> bool
+  (** [is_closed channel] returns whether the given channel is currently
+      closed. *)
+
 (** {2 Random access} *)
 
 val position : 'a channel -> int64
@@ -226,7 +230,7 @@ val read_line : input_channel -> string Lwt.t
       without the end of line. End of line is either ["\n"] or
       ["\r\n"].
 
-      If the end of line is reached before reading any character,
+      If the end of input is reached before reading any character,
       [End_of_file] is raised. If it is reached before reading an end
       of line but characters have already been read, they are
       returned. *)
@@ -498,7 +502,7 @@ val open_connection :
       connection to the given address and returns two channels for using
       it. If [fd] is not specified, a fresh one will be used.
 
-      The connection is completly closed when you close both
+      The connection is completely closed when you close both
       channels.
 
       @raise Unix.Unix_error on error.

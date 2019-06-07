@@ -1,6 +1,6 @@
-# Lwt &nbsp;&nbsp; [![version 4.1.0][version]][releases] [![Gitter chat][gitter-img]][gitter] [![Travis status][travis-img]][travis] [![AppVeyor status][appveyor-img]][appveyor]
+# Lwt &nbsp;&nbsp; [![version 4.2.1][version]][releases] [![Gitter chat][gitter-img]][gitter] [![Travis status][travis-img]][travis] [![AppVeyor status][appveyor-img]][appveyor]
 
-[version]:      https://img.shields.io/badge/version-4.1.0-blue.svg
+[version]:      https://img.shields.io/badge/version-4.2.1-blue.svg
 [releases]:     https://github.com/ocsigen/lwt/releases
 [gitter-img]:   https://img.shields.io/badge/chat-on_gitter-lightgrey.svg
 [travis]:       https://travis-ci.org/ocsigen/lwt/branches
@@ -131,9 +131,9 @@ on [discuss.ocaml.org][discourse], or on [Stack Overflow][so]. Please do ask!
 Even apparently simple questions often end up educating other users, not to
 mention enlightening the maintainers!
 
-Subscribe to the [announcements issue][announcements] to get news about Lwt
-releases. It is less noisy than watching the whole repository. Announcements are
-also made in [/r/ocaml][reddit], and on [discuss.ocaml.org][discourse].
+Release announcements are made in [/r/ocaml][reddit], and on
+[discuss.ocaml.org][discourse]. Watching the repo for "Releases only" is also an
+option.
 
 [gitter]: https://gitter.im/ocaml-lwt/Lobby
 [irc]:    http://webchat.freenode.net/?channels=#ocaml

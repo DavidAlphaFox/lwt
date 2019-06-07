@@ -238,7 +238,7 @@ let () =
     {{: http://man7.org/linux/man-pages/man7/epoll.7.html} [epoll(7)]},
     {{: https://www.freebsd.org/cgi/man.cgi?query=kqueue&sektion=2}
     [kqueue(2)]}, or whatever asynchronous I/O API your system provides. On
-    browsers, the work of {!Lwt_main.run} is done by the surrouding JavaScript
+    browsers, the work of {!Lwt_main.run} is done by the surrounding JavaScript
     engine, so you don't call {!Lwt_main.run} from inside your program. But the
     execution model is still the same, and the description below applies!
 
@@ -323,7 +323,7 @@ let () =
       ways: {e fulfilled} with a value, or {e rejected} with an exception. There
       is nothing conceptually special about rejection – it's just that you can
       ask for callbacks to run only on fulfillment, only on rejection, etc.
-    - {{: #2_Cancelation} Cancelation}. This is a special case of rejection,
+    - {{: #2_Cancelation} Cancellation}. This is a special case of rejection,
       specifically with exception {!Lwt.Canceled}. It has extra helpers in the
       Lwt API.
     - {{: #2_Concurrency} Concurrency helpers}. All of these could be
@@ -737,8 +737,7 @@ val try_bind : (unit -> 'a t) -> ('a -> 'b t) -> (exn -> 'b t) -> 'b t
 (** [Lwt.try_bind f g h] applies [f ()], and then makes it so that:
 
     - [g] will run when promise [f ()] is {{: #TYPEt} {e fulfilled}},
-    - [h] will run when promise [f ()] is, alternatively, {{: #TYPEt}
-      {e rejected}}.
+    - [h] will run when promise [f ()] is {{: #TYPEt} {e rejected}}.
 
     [Lwt.try_bind] is a generalized {!Lwt.finalize}. The difference is that
     [Lwt.try_bind] runs different callbacks depending on {e how} [f ()] is
@@ -891,6 +890,35 @@ v}
 
 (** {3 Multiple wait} *)
 
+val both : 'a t -> 'b t -> ('a * 'b) t
+(** [Lwt.both p_1 p_2] returns a promise that is pending until {e both} promises
+    [p_1] and [p_2] become {{: #TYPEt} {e resolved}}.
+
+{[
+let () =
+  let p_1 =
+    let%lwt () = Lwt_unix.sleep 3. in
+    Lwt_io.printl "Three seconds elapsed"
+  in
+
+  let p_2 =
+    let%lwt () = Lwt_unix.sleep 5. in
+    Lwt_io.printl "Five seconds elapsed"
+  in
+
+  let p_3 = Lwt.both p_1 p_2 in
+  Lwt_main.run p_3
+
+(* ocamlfind opt -linkpkg -package lwt_ppx,lwt.unix code.ml && ./a.out *)
+]}
+
+    If both [p_1] and [p_2] become fulfilled, [Lwt.both p_1 p_2] is also
+    fulfilled, with the pair of their final values. Otherwise, if at least one
+    of the two promises becomes rejected, [Lwt.both p_1 p_2] is rejected with
+    the same exception as one such promise, chosen arbitrarily. Note that this
+    occurs only after both promises are resolved, not immediately when the first
+    promise is rejected. *)
+
 val join : (unit t) list -> unit t
 (** [Lwt.join ps] returns a promise that is pending until {e all} promises in
     the list [ps] become {{: #TYPEt} {e resolved}}.
@@ -989,7 +1017,7 @@ val nchoose_split : ('a t) list -> ('a list * ('a t) list) t
 
 
 
-(** {2 Cancelation} *)
+(** {2 Cancellation} *)
 
 exception Canceled
 (** Canceled promises are those rejected with this exception, [Lwt.Canceled].
@@ -1015,7 +1043,7 @@ val cancel : _ t -> unit
     propagated “forwards” by {!Lwt.bind}, {!Lwt.join}, etc., as described in the
     documentation of those functions.
 
-    {b Cancelation} is a separate phase, triggered only by {!Lwt.cancel}, that
+    {b Cancellation} is a separate phase, triggered only by {!Lwt.cancel}, that
     searches {e backwards}, strating from [p], for promises to reject with
     {!Lwt.Canceled}. Once those promises are found, they are canceled, and then
     ordinary, forwards rejection propagation takes over.
@@ -1075,7 +1103,7 @@ let () =
       rejection.
     - Suppose [p] was returned by {!Lwt.join}, {!Lwt.pick}, or similar function,
       which was applied to the promise list [ps]. {!Lwt.cancel} then recursively
-      tries to cancel each promise in [ps]. If one of those cancelations
+      tries to cancel each promise in [ps]. If one of those cancellations
       succeeds, [p] {e may} be canceled later by the normal propagation of
       rejection. *)
 
@@ -1087,7 +1115,7 @@ val on_cancel : _ t -> (unit -> unit) -> unit
     callbacks that are triggered by rejection, such as those added by
     {!Lwt.catch}.
 
-    Note that this does not interact directly with the {e cancelation}
+    Note that this does not interact directly with the {e cancellation}
     mechanism, the backwards search described in {!Lwt.cancel}. For example,
     manually rejecting a promise with {!Lwt.Canceled} is sufficient to trigger
     [f].
@@ -1097,16 +1125,16 @@ val on_cancel : _ t -> (unit -> unit) -> unit
 
 val protected : 'a t -> 'a t
 (** [Lwt.protected p] creates a {{: #VALcancel} cancelable} promise [p'] with
-    the same state as [p]. However, cancelation, the backwards search described
+    the same state as [p]. However, cancellation, the backwards search described
     in {!Lwt.cancel}, stops at [p'], and does not continue to [p]. *)
 
 val no_cancel : 'a t -> 'a t
 (** [Lwt.no_cancel p] creates a non-{{: #VALcancel}cancelable} promise [p'],
-    with the same state as [p]. Cancelation, the backwards search described in
+    with the same state as [p]. Cancellation, the backwards search described in
     {!Lwt.cancel}, stops at [p'], and does not continue to [p].
 
     Note that [p'] can still be canceled if [p] is canceled. [Lwt.no_cancel]
-    only prevents cancelation of [p] and [p'] through [p']. *)
+    only prevents cancellation of [p] and [p'] through [p']. *)
 
 val wait : unit -> ('a t * 'a u)
 (** [Lwt.wait] is the same as {!Lwt.task}, except the resulting promise [p] is
@@ -1238,7 +1266,8 @@ val on_any : 'a t -> ('a -> unit) -> (exn -> unit) -> unit
 
     Of the operators declared in this module, only [>|=] is recommended for new
     code. The only other commonly-used operator is [>>=]. *)
-module Infix : sig
+module Infix :
+sig
   val (>>=) : 'a t -> ('a -> 'b t) -> 'b t
   (** [p >>= f] is the same as {!Lwt.bind}[ p f]. It requires [Lwt.Infix] to be
       opened in scope:
@@ -1286,7 +1315,7 @@ let () =
       explicit {!Lwt.choose} syntax, so using this operator is not
       recommended.
 
-      Futhermore, most users actually need {!Lwt.pick} instead of
+      Furthermore, most users actually need {!Lwt.pick} instead of
       {!Lwt.choose}. *)
 
   val (=<<) : ('a -> 'b t) -> 'a t -> 'b t
@@ -1302,6 +1331,27 @@ let () =
 
       This operator is obscure and its use is discouraged. It is the same as
       [p >|= f]. *)
+
+  (** This module provides support for {{:https://github.com/janestreet/ppx_let}
+      ppx_let}. *)
+  module Let_syntax :
+  sig
+    val return : 'a -> 'a t
+    (** See {!Lwt.return}. *)
+
+    val map : 'a t -> f:('a -> 'b) -> 'b t
+    (** See {!Lwt.map}. *)
+
+    val bind : 'a t -> f:('a -> 'b t) -> 'b t
+    (** See {!Lwt.bind}. *)
+
+    val both : 'a t -> 'b t -> ('a * 'b) t
+    (** See {!Lwt.both}. *)
+
+    module Open_on_rhs :
+    sig
+    end
+  end
 end
 
 

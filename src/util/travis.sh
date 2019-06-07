@@ -39,15 +39,9 @@ packages
 
 
 
-if [ "$FLAMBDA" = yes ]
-then
-    COMPILER="$COMPILER+flambda"
-fi
-
-
-
 # Initialize opam.
-opam init -y --compiler=$COMPILER --disable-sandboxing --disable-shell-hook
+opam init -y --bare --disable-sandboxing --disable-shell-hook
+opam switch create . $COMPILER $REPOSITORIES --no-install
 eval `opam env`
 opam --version
 ocaml -version
@@ -84,3 +78,12 @@ make clean
 make install-for-packaging-test
 make packaging-test
 make uninstall-after-packaging-test
+
+
+
+# Run the ppx_let integratio test.
+if [ "$COMPILER" != "4.02.3" ]
+then
+    make ppx_let-test-deps
+    make ppx_let-test
+fi

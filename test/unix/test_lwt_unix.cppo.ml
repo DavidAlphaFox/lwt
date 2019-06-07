@@ -83,6 +83,7 @@ let utimes_tests = [
         (fun () -> Lwt_unix.utimes "non-existent-file" 0. 0.)
         (function
         | Unix.Unix_error (Unix.ENOENT, "utimes", _) -> Lwt.return_unit
+        | Unix.Unix_error (Unix.EUNKNOWNERR _, "utimes", _) -> Lwt.return_unit
         | e -> Lwt.fail e) [@ocaml.warning "-4"] >>= fun () ->
       Lwt.return_true);
 ]
@@ -226,6 +227,31 @@ let readdir_tests =
            "readdir_n", (fun () -> Lwt_unix.readdir_n directory 1 >|= ignore);
            "rewinddir", (fun () -> Lwt_unix.rewinddir directory);
            "closedir", (fun () -> Lwt_unix.closedir directory)]);
+  ]
+
+let io_vectors_byte_count_tests =
+  let open Lwt_unix.IO_vectors in
+  [ test "io_vector_byte_count: basic"
+      (fun () ->
+         let iov = create () in
+         append_bytes iov (Bytes.create 10) 0 10;
+         append_bigarray iov (Lwt_bytes.create 10) 0 10;
+         Lwt.return (byte_count iov = 20));
+
+    test "io_vector_byte_count: offsets, partials"
+      (fun () ->
+         let iov = create () in
+         append_bytes iov (Bytes.create 10) 5 1;
+         append_bigarray iov (Lwt_bytes.create 10) 1 1;
+         Lwt.return (byte_count iov = 2));
+
+    test "io_vector_byte_count: drops"
+      (fun () ->
+         let iov = create () in
+         append_bytes iov (Bytes.create 10) 5 1;
+         append_bigarray iov (Lwt_bytes.create 10) 1 1;
+         drop iov 1;
+         Lwt.return (byte_count iov = 1));
   ]
 
 let readv_tests =
@@ -701,14 +727,49 @@ let lwt_preemptive_tests = [
   end;
 ]
 
+let lwt_user_tests = [
+  test "getlogin and Unix.getlogin" ~only_if:(fun () -> not Sys.win32) begin fun () ->
+    let unix_user = Unix.getlogin () in
+    Lwt_unix.getlogin () >>= fun user ->
+    Lwt.return (user = unix_user)
+  end;
+  test "getpwnam and Unix.getpwnam" ~only_if:(fun () -> not Sys.win32) begin fun () ->
+    let unix_user = Unix.getlogin () in
+    let unix_password = Unix.getpwnam unix_user in
+    Lwt_unix.getpwnam unix_user >>= fun password ->
+    Lwt.return (password = unix_password)
+  end;
+  test "getpwuid and Unix.getpwuid" ~only_if:(fun () -> not Sys.win32) begin fun () ->
+    let pwnam = Unix.getpwnam (Unix.getlogin ()) in
+    let unix_pwuid = Unix.getpwuid pwnam.pw_uid in
+    Lwt_unix.getpwuid pwnam.pw_uid >>= fun pwuid ->
+    Lwt.return (pwuid = unix_pwuid)
+  end;
+  test "getgrgid and Unix.getgrgid" ~only_if:(fun () -> not Sys.win32) begin fun () ->
+    let group_id = Unix.getgid () in
+    let unix_group = Unix.getgrgid group_id in
+    Lwt_unix.getgrgid group_id >>= fun group ->
+    Lwt.return (group = unix_group)
+  end;
+  test "getgrnam and Unix.getgrnam" ~only_if:(fun () -> not Sys.win32) begin fun () ->
+    let group_id = Unix.getgid () in
+    let unix_group = Unix.getgrgid group_id in
+    let group_name = unix_group.gr_name in
+    Lwt_unix.getgrnam group_name >>= fun group ->
+    Lwt.return (group = unix_group)
+  end
+]
+
 let suite =
   suite "lwt_unix"
     (openfile_tests @
      utimes_tests @
      readdir_tests @
+     io_vectors_byte_count_tests @
      readv_tests @
      writev_tests @
      bind_tests @
      dir_tests @
-     lwt_preemptive_tests
+     lwt_preemptive_tests @
+     lwt_user_tests
     )
