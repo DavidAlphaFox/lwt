@@ -792,13 +792,14 @@ struct
   let current_storage = ref Storage_map.empty
 
   let get key =
-    try
+    if Storage_map.mem key.id !current_storage then begin
       let refresh = Storage_map.find key.id !current_storage in
       refresh ();
       let value = key.value in
       key.value <- None;
       value
-    with Not_found ->
+    end
+    else
       None
 
   let with_value key value f =
@@ -1109,9 +1110,16 @@ struct
      while [Lwt.wakeup_later] is expected to defer all callbacks of the promise
      resolved, {e unless} Lwt is not already inside the resolution loop.
 
-     These behaviors will be made uniform in Lwt 4.0.0. However, in the
-     meantime, the above callback-invoking functions support several optional
-     arguments to emulate the behaviors:
+     We planned to make these behaviors uniform in Lwt 4.0.0, but decided
+     against it due to the risk of breaking users. See
+
+     - https://github.com/ocsigen/lwt/pull/500
+     - https://github.com/ocsigen/lwt/pull/519
+
+     As part of the preparation for the change, the above callback-invoking
+     functions support several optional arguments to emulate the various
+     behaviors. We decided not to remove this machinery, because we might want
+     to expose different APIs to Lwt in the future.
 
      - [~allow_deferring:false] allows ignoring the callback stack depth, and
        calling the callbacks immediately. This emulates the old resolution
@@ -1124,9 +1132,6 @@ struct
        However, to ensure that the callback is tail-called, Lwt doesn't even
        update the callback stack depth for the benefit of *other* callback
        calls. It just blindly calls the callback.
-
-     It should be possible to eliminate these optional arguments in Lwt 4.0.0,
-     or restrict their usage to only deprecated APIs.
 
      See discussion of callback-calling semantics in:
 
@@ -1839,11 +1844,10 @@ struct
       Mechanism (2) is currently disabled, to emulate pre-3.2.0 Lwt semantics.
       It will be enabled in Lwt 4.0.0.
 
-      Functions other than [Lwt.bind] have analogous deferral behavior. For
-      example, in Lwt 4.0.0, [Lwt.catch] will defer the call to its callback [h]
-      if either the promise [f ()] is pending, or if that promise is rejected,
-      but the callback nesting depth is too high to safely call [h]
-      immediately. *)
+      Mechanism (2) is currently disabled. It may be used in an alternative Lwt
+      API.
+
+      Functions other than [Lwt.bind] have analogous deferral behavior. *)
     let create_result_promise_and_callback_if_deferred () =
       let p'' = new_pending ~how_to_cancel:(Propagate_cancel_to_one p) in
       (* The result promise is a fresh pending promise.

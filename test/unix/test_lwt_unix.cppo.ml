@@ -6,44 +6,67 @@
 open Test
 open Lwt.Infix
 
-let assert_fd_closed = "ASSERT_FD_CLOSED"
-let assert_fd_open   = "ASSERT_FD_OPEN"
+(* The CLOEXEC tests use execv(2) to execute this code, by passing --cloexec to
+   the copy of the tester in the child process. This is a module side effect
+   that interprets that --cloexec argument. *)
+let () =
+  let is_fd_open fd =
+    let fd  = (Obj.magic (int_of_string fd) : Unix.file_descr) in
+    let buf = Bytes.create 1 in
+    try
+      ignore (Unix.read fd buf 0 1);
+      true
+    with Unix.Unix_error (Unix.EBADF, _, _) ->
+      false
+  in
 
-let test_cloexec assertion flags =
-  if Sys.win32 then Lwt.return true
-  else
-    Lwt_unix.openfile "/dev/zero" (Unix.O_RDONLY :: flags) 0o644 >>= fun fd ->
-    let fd_ = Lwt_unix.unix_file_descr fd in
-    match Lwt_unix.fork () with
-      | 0 ->
-          Unix.putenv assertion (string_of_int @@ Obj.magic fd_);
-          (* There's no portable way to obtain the executable name (which
-           * may even no longer exist at this point), but argv[0] fortunately
-           * has the right value when the tests are run with "make test". *)
-          Unix.execv Sys.argv.(0) [||]
-      | n ->
-          Lwt_unix.close fd >>= fun () ->
-          Lwt_unix.waitpid [] n >>= function
-            | _, Unix.WEXITED 0 -> Lwt.return_true
-            | _, (Unix.WEXITED _ | Unix.WSIGNALED _ | Unix.WSTOPPED _) ->
-                Lwt.return_false
+  match Sys.argv with
+  | [|_; "--cloexec"; fd; "--open"|] ->
+    if is_fd_open fd then
+      exit 0
+    else
+      exit 1
+  | [|_; "--cloexec"; fd; "--closed"|] ->
+    if is_fd_open fd then
+      exit 1
+    else
+      exit 0
+  | _ ->
+    ()
+
+let test_cloexec ~closed flags =
+  Lwt_unix.openfile "/dev/zero" (Unix.O_RDONLY :: flags) 0o644 >>= fun fd ->
+  match Lwt_unix.fork () with
+  | 0 ->
+    let fd = string_of_int (Obj.magic (Lwt_unix.unix_file_descr fd)) in
+    let expected_status = if closed then "--closed" else "--open" in
+    (* There's no portable way to obtain the tester executable name (which may
+       even no longer exist at this point), but argv[0] fortunately has the
+       right value when the tests are run in the Lwt dev environment. *)
+    Unix.execv Sys.argv.(0) [|""; "--cloexec"; fd; expected_status|]
+  | n ->
+    Lwt_unix.close fd >>= fun () ->
+    Lwt_unix.waitpid [] n >>= function
+    | _, Unix.WEXITED 0 -> Lwt.return_true
+    | _, (Unix.WEXITED _ | Unix.WSIGNALED _ | Unix.WSTOPPED _) ->
+      Lwt.return_false
 
 let openfile_tests = [
-  test "openfile: O_CLOEXEC"
-    (fun () -> test_cloexec assert_fd_closed [Unix.O_CLOEXEC]);
+  test "openfile: O_CLOEXEC" ~only_if:(fun () -> not Sys.win32)
+    (fun () -> test_cloexec ~closed:true [Unix.O_CLOEXEC]);
 
-  test "openfile: O_CLOEXEC not given"
-    (fun () -> test_cloexec assert_fd_open []);
+  test "openfile: O_CLOEXEC not given" ~only_if:(fun () -> not Sys.win32)
+    (fun () -> test_cloexec ~closed:false []);
 
 #if OCAML_VERSION >= (4, 05, 0)
-  test "openfile: O_KEEPEXEC"
-    (fun () -> test_cloexec assert_fd_open [Unix.O_KEEPEXEC]);
+  test "openfile: O_KEEPEXEC" ~only_if:(fun () -> not Sys.win32)
+    (fun () -> test_cloexec ~closed:false [Unix.O_KEEPEXEC]);
 
-  test "openfile: O_CLOEXEC, O_KEEPEXEC"
-    (fun () -> test_cloexec assert_fd_closed [Unix.O_CLOEXEC; Unix.O_KEEPEXEC]);
+  test "openfile: O_CLOEXEC, O_KEEPEXEC" ~only_if:(fun () -> not Sys.win32)
+    (fun () -> test_cloexec ~closed:true [Unix.O_CLOEXEC; Unix.O_KEEPEXEC]);
 
-  test "openfile: O_KEEPEXEC, O_CLOEXEC"
-    (fun () -> test_cloexec assert_fd_closed [Unix.O_KEEPEXEC; Unix.O_CLOEXEC]);
+  test "openfile: O_KEEPEXEC, O_CLOEXEC" ~only_if:(fun () -> not Sys.win32)
+    (fun () -> test_cloexec ~closed:true [Unix.O_KEEPEXEC; Unix.O_CLOEXEC]);
 #endif
 ]
 
@@ -280,6 +303,10 @@ let readv_tests =
     let data = Bytes.unsafe_of_string data in
     Lwt_unix.write write_fd data 0 (Bytes.length data) >>= fun bytes_written ->
     Lwt_unix.close write_fd >>= fun () ->
+    (* Instrumentation for debugging an unreliable test. *)
+    if bytes_written <> Bytes.length data then
+      Printf.eprintf "\nwritev: expected to write %i bytes; wrote %i\n"
+        (Bytes.length data) bytes_written;
     Lwt.return (bytes_written = Bytes.length data)
   in
 
@@ -297,6 +324,14 @@ let readv_tests =
         | `Bigarray buffer -> acc ^ (Lwt_bytes.to_string buffer))
         "" underlying
     in
+
+    (* Instrumentation for an unreliable test. *)
+    if bytes_read <> expected_count then
+      Printf.eprintf "\nreadv: expected to read %i bytes; read %i\n"
+        expected_count bytes_read;
+    if actual <> expected_data then
+      Printf.eprintf "\nreadv: expected to read %s; read %s\n"
+        expected_data actual;
 
     Lwt.return (actual = expected_data && bytes_read = expected_count)
   in
@@ -590,6 +625,216 @@ let writev_tests =
            not (Lwt_unix.IO_vectors.is_empty io_vectors)));
   ]
 
+let send_recv_msg_tests = [
+  test "send_msg, recv_msg" ~only_if:(fun () -> not Sys.win32) begin fun () ->
+    let socket_1, socket_2 = Lwt_unix.(socketpair PF_UNIX SOCK_STREAM 0) in
+    let pipe_read, pipe_write = Lwt_unix.pipe () in
+
+    let source_buffer = Bytes.of_string "_foo_bar_" in
+    let source_iovecs = Lwt_unix.IO_vectors.create () in
+    Lwt_unix.IO_vectors.append_bytes source_iovecs source_buffer 1 3;
+    Lwt_unix.IO_vectors.append_bytes source_iovecs source_buffer 5 3;
+
+    Lwt_unix.Versioned.send_msg_2
+      ~socket:socket_1
+      ~io_vectors:source_iovecs
+      ~fds:[Lwt_unix.unix_file_descr pipe_write] >>= fun n ->
+    if n <> 6 then
+      Lwt.return false
+
+    else
+      let destination_buffer = Bytes.of_string "_________" in
+      let destination_iovecs = Lwt_unix.IO_vectors.create () in
+      Lwt_unix.IO_vectors.append_bytes
+        destination_iovecs destination_buffer 5 3;
+      Lwt_unix.IO_vectors.append_bytes
+        destination_iovecs destination_buffer 1 3;
+
+      Lwt_unix.Versioned.recv_msg_2
+        ~socket:socket_2 ~io_vectors:destination_iovecs >>= fun (n, fds) ->
+      let succeeded =
+        match n, fds, Bytes.to_string destination_buffer with
+        | 6, [fd], "_bar_foo_" -> Some fd
+        | _ -> None
+      in
+      match succeeded with
+      | None ->
+        Lwt.return false
+      | Some fd ->
+
+        let n = Unix.write fd (Bytes.of_string "baz") 0 3 in
+        if n <> 3 then
+          Lwt.return false
+
+        else
+          let buffer = Bytes.create 3 in
+          Lwt_unix.read pipe_read buffer 0 3 >>= fun n ->
+          match n, Bytes.to_string buffer with
+          | 3, "baz" ->
+            Lwt_unix.close socket_1 >>= fun () ->
+            Lwt_unix.close socket_2 >>= fun () ->
+            Lwt_unix.close pipe_read >>= fun () ->
+            Lwt_unix.close pipe_write >>= fun () ->
+            Unix.close fd;
+            Lwt.return true
+
+          | _ ->
+            Lwt.return false
+  end;
+
+  test "send_msg, recv_msg (old)" ~only_if:(fun () -> not Sys.win32)
+      begin fun () ->
+
+    let socket_1, socket_2 = Lwt_unix.(socketpair PF_UNIX SOCK_STREAM 0) in
+    let pipe_read, pipe_write = Lwt_unix.pipe () in
+
+    let source_buffer = "_foo_bar_" in
+    let source_iovecs = Lwt_unix.[
+      {
+        iov_buffer = source_buffer;
+        iov_offset = 1;
+        iov_length = 3;
+      };
+      {
+        iov_buffer = source_buffer;
+        iov_offset = 5;
+        iov_length = 3;
+      };
+    ]
+    in
+
+    (Lwt_unix.send_msg [@ocaml.warning "-3"])
+      ~socket:socket_1
+      ~io_vectors:source_iovecs
+      ~fds:[Lwt_unix.unix_file_descr pipe_write] >>= fun n ->
+    if n <> 6 then
+      Lwt.return false
+
+    else
+      let destination_buffer = "_________" in
+      let destination_iovecs = Lwt_unix.[
+        {
+          iov_buffer = destination_buffer;
+          iov_offset = 5;
+          iov_length = 3;
+        };
+        {
+          iov_buffer = destination_buffer;
+          iov_offset = 1;
+          iov_length = 3;
+        };
+      ]
+      in
+
+      (Lwt_unix.recv_msg [@ocaml.warning "-3"])
+        ~socket:socket_2 ~io_vectors:destination_iovecs >>= fun (n, fds) ->
+      let succeeded =
+        match n, fds, destination_buffer with
+        | 6, [fd], "_bar_foo_" -> Some fd
+        | _ -> None
+      in
+      match succeeded with
+      | None ->
+        Lwt.return false
+      | Some fd ->
+
+        let n = Unix.write fd (Bytes.of_string "baz") 0 3 in
+        if n <> 3 then
+          Lwt.return false
+
+        else
+          let buffer = Bytes.create 3 in
+          Lwt_unix.read pipe_read buffer 0 3 >>= fun n ->
+          match n, Bytes.to_string buffer with
+          | 3, "baz" ->
+            Lwt_unix.close socket_1 >>= fun () ->
+            Lwt_unix.close socket_2 >>= fun () ->
+            Lwt_unix.close pipe_read >>= fun () ->
+            Lwt_unix.close pipe_write >>= fun () ->
+            Unix.close fd;
+            Lwt.return true
+
+          | _ ->
+            Lwt.return false
+  end;
+
+  test "send_msg, recv_msg (Lwt_bytes, old)" ~only_if:(fun () -> not Sys.win32)
+      begin fun () ->
+
+    let socket_1, socket_2 = Lwt_unix.(socketpair PF_UNIX SOCK_STREAM 0) in
+    let pipe_read, pipe_write = Lwt_unix.pipe () in
+
+    let source_buffer = Lwt_bytes.of_string "_foo_bar_" in
+    let source_iovecs = Lwt_bytes.[
+      {
+        iov_buffer = source_buffer;
+        iov_offset = 1;
+        iov_length = 3;
+      };
+      {
+        iov_buffer = source_buffer;
+        iov_offset = 5;
+        iov_length = 3;
+      };
+    ]
+    in
+
+    (Lwt_bytes.send_msg [@ocaml.warning "-3"])
+      ~socket:socket_1
+      ~io_vectors:source_iovecs
+      ~fds:[Lwt_unix.unix_file_descr pipe_write] >>= fun n ->
+    if n <> 6 then
+      Lwt.return false
+
+    else
+      let destination_buffer = Lwt_bytes.of_string "_________" in
+      let destination_iovecs = Lwt_bytes.[
+        {
+          iov_buffer = destination_buffer;
+          iov_offset = 5;
+          iov_length = 3;
+        };
+        {
+          iov_buffer = destination_buffer;
+          iov_offset = 1;
+          iov_length = 3;
+        };
+      ]
+      in
+
+      (Lwt_bytes.recv_msg [@ocaml.warning "-3"])
+        ~socket:socket_2 ~io_vectors:destination_iovecs >>= fun (n, fds) ->
+      let succeeded =
+        match n, fds, Lwt_bytes.to_string destination_buffer with
+        | 6, [fd], "_bar_foo_" -> Some fd
+        | _ -> None
+      in
+      match succeeded with
+      | None ->
+        Lwt.return false
+      | Some fd ->
+
+        let n = Unix.write fd (Bytes.of_string "baz") 0 3 in
+        if n <> 3 then
+          Lwt.return false
+
+        else
+          let buffer = Bytes.create 3 in
+          Lwt_unix.read pipe_read buffer 0 3 >>= fun n ->
+          match n, Bytes.to_string buffer with
+          | 3, "baz" ->
+            Lwt_unix.close socket_1 >>= fun () ->
+            Lwt_unix.close socket_2 >>= fun () ->
+            Lwt_unix.close pipe_read >>= fun () ->
+            Lwt_unix.close pipe_write >>= fun () ->
+            Unix.close fd;
+            Lwt.return true
+
+          | _ ->
+            Lwt.return false
+  end;
+]
+
 let bind_tests_address = Unix.(ADDR_INET (inet_addr_loopback, 56100))
 
 let bind_tests = [
@@ -727,19 +972,27 @@ let lwt_preemptive_tests = [
   end;
 ]
 
+let getlogin_works =
+  if Sys.win32 then
+    false
+  else
+    match Unix.getlogin () with
+    | _ -> true
+    | exception Unix.Unix_error _ -> false
+
 let lwt_user_tests = [
-  test "getlogin and Unix.getlogin" ~only_if:(fun () -> not Sys.win32) begin fun () ->
+  test "getlogin and Unix.getlogin" ~only_if:(fun () -> getlogin_works) begin fun () ->
     let unix_user = Unix.getlogin () in
     Lwt_unix.getlogin () >>= fun user ->
     Lwt.return (user = unix_user)
   end;
-  test "getpwnam and Unix.getpwnam" ~only_if:(fun () -> not Sys.win32) begin fun () ->
+  test "getpwnam and Unix.getpwnam" ~only_if:(fun () -> getlogin_works) begin fun () ->
     let unix_user = Unix.getlogin () in
     let unix_password = Unix.getpwnam unix_user in
     Lwt_unix.getpwnam unix_user >>= fun password ->
     Lwt.return (password = unix_password)
   end;
-  test "getpwuid and Unix.getpwuid" ~only_if:(fun () -> not Sys.win32) begin fun () ->
+  test "getpwuid and Unix.getpwuid" ~only_if:(fun () -> getlogin_works) begin fun () ->
     let pwnam = Unix.getpwnam (Unix.getlogin ()) in
     let unix_pwuid = Unix.getpwuid pwnam.pw_uid in
     Lwt_unix.getpwuid pwnam.pw_uid >>= fun pwuid ->
@@ -768,6 +1021,7 @@ let suite =
      io_vectors_byte_count_tests @
      readv_tests @
      writev_tests @
+     send_recv_msg_tests @
      bind_tests @
      dir_tests @
      lwt_preemptive_tests @

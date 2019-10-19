@@ -17,15 +17,18 @@ install:
   - 'IF "%ARCH%"=="x86" (SET CYGSH=C:\Cygwin\bin\bash -lc) ELSE (SET CYGSH=C:\Cygwin64\bin\bash -lc)'
   - 'IF "%ARCH%"=="x86" (SET CYGSETUP=C:\Cygwin\setup-x86) ELSE (SET CYGSETUP=C:\Cygwin64\setup-x86_64)'
 
+  - '%CYGSH% "date"'
+
   - 'IF "%LWT_APPVEYOR_DEBUG%"=="yes" (%CYGSETUP% -q -P nano)'
   - '%CYGSETUP% -q -P rsync -P patch -P diffutils -P make -P unzip -P m4'
 
   - 'IF "%LIBEV%"=="yes" (%CYGSETUP% -q -P libev-devel)'
 
+  - '%CYGSH% "date"'
+
   - '%CYGSH% "wget https://github.com/fdopen/opam-repository-mingw/releases/download/0.0.0.2/opam64.tar.xz"'
   - '%CYGSH% "tar -xf opam64.tar.xz"'
   - '%CYGSH% "bash opam64/install.sh"'
-  - '%CYGSH% "opam init default https://github.com/fdopen/opam-repository-mingw.git#opam2 -c ocaml-variants.4.07.1+mingw64c --disable-sandboxing --yes --auto-setup"'
 
   - '%CYGSH% "cd /cygdrive/c/projects/lwt ; src/util/appveyor-install.sh"'
 
@@ -33,7 +36,8 @@ build_script:
   - '%CYGSH% "cd /cygdrive/c/projects/lwt ; src/util/appveyor-build.sh"'
 
 cache:
-  - '..\opam-cache-%SYSTEM%-%COMPILER%-%LIBEV%.tar -> lwt*.opam, appveyor.yml, src\util\appveyor*.sh'
+  - C:\Cygwin64\home\appveyor\.opam
+  - _cache
 
 on_finish:
   - ps: 'if ($env:LWT_APPVEYOR_DEBUG -eq "yes") { $blockRdp = $true; iex ((new-object net.webclient).DownloadString("https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1")) }'
