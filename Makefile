@@ -10,7 +10,7 @@ build:
 # run unit tests for package lwt
 .PHONY: test
 test: build
-	dune runtest -j 1 --no-buffer
+	dune runtest
 
 # Install dependencies needed during development.
 .PHONY : dev-deps
@@ -25,14 +25,14 @@ doc:
 
 # Build HTML documentation with ocamldoc
 .PHONY: doc-api-html
-doc-api-html: build-all
+doc-api-html: build
 	$(MAKE) -C docs api/html/index.html
 
 # Build wiki documentation with wikidoc
 # requires ocaml 4.03.0 and pinning the repo
 # https://github.com/ocsigen/wikidoc
 .PHONY: doc-api-wiki
-doc-api-wiki: build-all
+doc-api-wiki: build
 	$(MAKE) -C docs api/wiki/index.wiki
 
 # Packaging tests. These are run with Lwt installed by OPAM, typically during
@@ -83,14 +83,22 @@ clean:
 	done
 	rm -rf _coverage/
 
-BISECT_FILES_PATTERN := _build/default/test/*/bisect*.out
+EXPECTED_FILES := \
+    --expect src/core/ \
+    --expect src/react/ \
+    --expect src/unix/ \
+    --do-not-expect src/unix/config/ \
+    --do-not-expect src/unix/lwt_gc.ml \
+    --do-not-expect src/unix/lwt_throttle.ml \
+    --do-not-expect src/unix/unix_c/
 
 .PHONY: coverage
-coverage: clean
+coverage: clean coverage-only
+
+.PHONY : coverage-only
+coverage-only :
 	BISECT_ENABLE=yes $(MAKE) build
-	BISECT_ENABLE=yes dune runtest -j 1 --no-buffer
-	bisect-ppx-report \
-	    -I _build/default/ -html _coverage/ \
-	    -text - -summary-only \
-	    $(BISECT_FILES_PATTERN)
+	BISECT_ENABLE=yes dune runtest --force
+	bisect-ppx-report html $(EXPECTED_FILES)
+	bisect-ppx-report summary
 	@echo See _coverage/index.html

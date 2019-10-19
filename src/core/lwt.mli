@@ -81,8 +81,8 @@ let () =
       value, its callbacks are called.
     - Separate {b resolvers} of type ['a ]{!Lwt.u} are used to write values into
       promises, through {!Lwt.wakeup_later}.
-    - Promises and resolvers are created in pairs using {!Lwt.task}. Lwt I/O
-      functions call {!Lwt.task} internally, but return only the promise.
+    - Promises and resolvers are created in pairs using {!Lwt.wait}. Lwt I/O
+      functions call {!Lwt.wait} internally, but return only the promise.
     - {!Lwt_main.run} is used to wait on one “top-level” promise. When that
       promise gets a value, the program terminates.
 
@@ -385,7 +385,7 @@ type +'a t
 
     Promise variables of this type, ['a Lwt.t], are actually {b read-only} in
     Lwt. Separate {e resolvers} of type ['a ]{!Lwt.u} are used to write to them.
-    Promises and their resolvers are created together by calling {!Lwt.task}.
+    Promises and their resolvers are created together by calling {!Lwt.wait}.
     There is one exception to this: most promises can be {e canceled} by calling
     {!Lwt.cancel}, without going through a resolver. *)
 
@@ -396,7 +396,7 @@ type -'a u
     be passed to {!Lwt.wakeup_later}, {!Lwt.wakeup_later_exn}, or
     {!Lwt.wakeup_later_result} to resolve that promise. *)
 
-val task : unit -> ('a t * 'a u)
+val wait : unit -> ('a t * 'a u)
 (** Creates a new pending {{: #TYPEt} promise}, paired with its {{: #TYPEu}
     resolver}.
 
@@ -404,7 +404,7 @@ val task : unit -> ('a t * 'a u)
     libraries, call it internally, and return only the promise. You then chain
     the promises together using {!Lwt.bind}.
 
-    However, it is important to understand [Lwt.task] as the fundamental promise
+    However, it is important to understand [Lwt.wait] as the fundamental promise
     “constructor.” All other functions that evaluate to a promise can be, or
     are, eventually implemented in terms of it. *)
 
@@ -420,7 +420,14 @@ val wakeup_later : 'a u -> 'a -> unit
     If the promise is not pending, [Lwt.wakeup_later] raises
     {{: https://caml.inria.fr/pub/docs/manual-ocaml/libref/Pervasives.html#VALinvalid_arg}
     [Pervasives.Invalid_argument]}, unless the promise is {{: #VALcancel}
-    canceled}. If the promise is canceled, [Lwt.wakeup_later] has no effect. *)
+    canceled}. If the promise is canceled, [Lwt.wakeup_later] has no effect.
+
+    If your program has multiple threads, it is important to make sure that
+    [Lwt.wakeup_later] (and any similar function) is only called from the main
+    thread. [Lwt.wakeup_later] can trigger callbacks attached to promises
+    by the program, and these assume they are running in the main thread. If you
+    need to communicate from a worker thread to the main thread running Lwt, see
+    {!Lwt_preemptive} or {!Lwt_unix.send_notification}. *)
 
 val wakeup_later_exn : _ u -> exn -> unit
 (** [Lwt.wakeup_later_exn r exn] is like {!Lwt.wakeup_later}, except, if the
@@ -452,7 +459,15 @@ Lwt.return (line ^ ".")
 
 val fail : exn -> _ t
 (** [Lwt.fail exn] is like {!Lwt.return}, except the new {{: #TYPEt} promise}
-    that is {e already rejected} with [exn]. *)
+    that is {e already rejected} with [exn].
+
+    Whenever possible, it is recommended to use [raise exn] instead, as [raise]
+    captures a backtrace, while [Lwt.fail] does not. If you call [raise exn] in
+    a callback that is expected by Lwt to return a promise, Lwt will
+    automatically wrap [exn] in a rejected promise, but the backtrace will have
+    been recorded by the OCaml runtime. Use [Lwt.fail] only when you
+    specifically want to create a rejected promise, to pass to another function,
+    or store in a data structure. *)
 
 
 
@@ -1017,15 +1032,34 @@ val nchoose_split : ('a t) list -> ('a list * ('a t) list) t
 
 
 
-(** {2 Cancellation} *)
+(** {2 Cancellation}
+
+    Note: cancelation has proved difficult to understand, explain, and maintain,
+    so use of these functions is discouraged in new code. See
+    {{:https://github.com/ocsigen/lwt/issues/283#issuecomment-518014539}
+    ocsigen/lwt#283}. *)
 
 exception Canceled
 (** Canceled promises are those rejected with this exception, [Lwt.Canceled].
     See {!Lwt.cancel}. *)
 
+val task : unit -> ('a t * 'a u)
+(** [Lwt.task] is the same as {!Lwt.wait}, except the resulting promise [p] is
+    {{: #VALcancel} cancelable}.
+
+    This is significant, because it means promises created by [Lwt.task] can be
+    resolved (specifically, rejected) by canceling them directly, in addition to
+    being resolved through their paired resolvers.
+
+    In contrast, promises returned by {!Lwt.wait} can only be resolved through
+    their resolvers. *)
+
 val cancel : _ t -> unit
 (** [Lwt.cancel p] attempts to {e cancel} the pending promise [p], without
     needing access to its resolver.
+
+    It is recommended to avoid [Lwt.cancel], and handle cancelation by tracking
+    the needed extra state explicitly within your library or application.
 
     A {b canceled} promise is one that has been rejected with exception
     {!Lwt.Canceled}.
@@ -1135,16 +1169,6 @@ val no_cancel : 'a t -> 'a t
 
     Note that [p'] can still be canceled if [p] is canceled. [Lwt.no_cancel]
     only prevents cancellation of [p] and [p'] through [p']. *)
-
-val wait : unit -> ('a t * 'a u)
-(** [Lwt.wait] is the same as {!Lwt.task}, except the resulting promise [p] is
-    {e not} {{: #VALcancel} cancelable}.
-
-    This is significant, because it means [p] created by [Lwt.wait] can {e only}
-    be resolved through its paired resolver.
-
-    In contrast, promises returned by {!Lwt.task} can additionally be resolved
-    by canceling them directly with {!Lwt.cancel}. *)
 
 
 
@@ -1481,7 +1505,12 @@ val state : 'a t -> 'a state
 
 (** {2 Deprecated} *)
 
-(** {3 Implicit callback arguments} *)
+(** {3 Implicit callback arguments}
+
+    Using this mechanism is discouraged, because it is non-syntactic, and
+    because it manipulates hidden state in module [Lwt]. It is recommended
+    instead to pass additional values explicitly in tuples, or maintain explicit
+    associative maps for them. *)
 
 type 'a key
 (** Keys into the implicit callback argument map, for implicit arguments of type
@@ -1576,11 +1605,6 @@ let () =
     and its variant [try%lwt], {!Lwt.finalize} and its variant [%lwt.finally],
     {!Lwt.try_bind}, {!Lwt.on_success}, {!Lwt.on_failure},
     {!Lwt.on_termination}, and {!Lwt.on_any}.
-
-    Using this mechanism is discouraged, because it is non-syntactic, and
-    because it manipulates hidden state in module [Lwt]. It is recommended
-    instead to pass additional values explicitly in tuples, or maintain explicit
-    associative maps for them.
 
     [Lwt.with_value] should only be called in the main thread, i.e. do not call
     it inside {!Lwt_preemptive.detach}. *)
@@ -1834,14 +1858,20 @@ val fail_with : string -> _ t
 
 {[
 Lwt.fail (Pervasives.Failure s)
-]} *)
+]}
+
+    In most cases, it is better to use [failwith s] from the standard library.
+    See {!Lwt.fail} for an explanation. *)
 
 val fail_invalid_arg : string -> _ t
 (** [Lwt.invalid_arg s] is an abbreviation for
 
 {[
 Lwt.fail (Pervasives.Invalid_argument s)
-]} *)
+]}
+
+    In most cases, it is better to use [invalid_arg s] from the standard
+    library. See {!Lwt.fail} for an explanation. *)
 
 
 

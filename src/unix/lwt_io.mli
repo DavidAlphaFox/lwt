@@ -450,6 +450,7 @@ val open_temp_file :
   ?perm:Unix.file_perm ->
   ?temp_dir:string ->
   ?prefix:string ->
+  ?suffix:string ->
   unit ->
     (string * output_channel) Lwt.t
 (** [open_temp_file ()] starts creating a new temporary file, and evaluates to a
@@ -478,7 +479,10 @@ val open_temp_file :
 
     [?prefix] helps determine the name of the file. It will be the prefix
     concatenated with a random sequence of characters. If not specified,
-    [open_temp_file] uses some default prefix. *)
+    [open_temp_file] uses some default prefix.
+
+    [?suffix] is like prefix, but it is appended at the end of the filename. In
+    particular, it can be used to set the extension. *)
 
 val with_temp_file :
   ?buffer:Lwt_bytes.t ->
@@ -486,6 +490,7 @@ val with_temp_file :
   ?perm:Unix.file_perm ->
   ?temp_dir:string ->
   ?prefix:string ->
+  ?suffix:string ->
   (string * output_channel -> 'b Lwt.t) ->
     'b Lwt.t
 (** [with_temp_file f] calls {!open_temp_file}[ ()], passing all optional
@@ -493,6 +498,40 @@ val with_temp_file :
     created, passing the filename and output channel to [f]. When the promise
     returned by [f] is resolved, [with_temp_file] closes the channel and deletes
     the temporary file by calling {!Lwt_unix.unlink}. *)
+
+val create_temp_dir :
+  ?perm:Unix.file_perm ->
+  ?parent:string ->
+  ?prefix:string ->
+  ?suffix:string ->
+  unit ->
+    string Lwt.t
+(** Creates a temporary directory, and returns a promise that resolves to its
+    path. The caller must take care to remove the directory. Alternatively, see
+    {!Lwt_io.with_temp_dir}.
+
+    If [~perm] is specified, the directory is created with the given
+    permissions. The default permissions are [0755].
+
+    [~parent] is the directory in which the temporary directory is created. If
+    not specified, the default value is the result of
+    [Filename.get_temp_dir_name ()].
+
+    [~prefix] is prepended to the directory name, and [~suffix] is appended to
+    it. *)
+
+val with_temp_dir :
+  ?perm:Unix.file_perm ->
+  ?parent:string ->
+  ?prefix:string ->
+  ?suffix:string ->
+  (string -> 'a Lwt.t) ->
+    'a Lwt.t
+(** [with_temp_dir f] first calls {!create_temp_dir}, forwarding all optional
+    arguments to it. Once the temporary directory is created at [path],
+    [with_temp_dir f] calls [f path]. When the promise returned by [f path] is
+    resolved, [with_temp_dir f] recursively deletes the temporary directory and
+    all its contents. *)
 
 val open_connection :
   ?fd : Lwt_unix.file_descr ->
@@ -578,7 +617,8 @@ f client_address client_socket
     [establish_server_with_client_socket] will internally assign
     [listen_address] to the server socket.
 
-    [~backlog] is the argument passed to {!Lwt_unix.listen}.
+    [~backlog] is the argument passed to {!Lwt_unix.listen}. Its default value
+    is [SOMAXCONN], which varies by platform and socket kind.
 
     The returned promise (a [server Lwt.t]) resolves when the server has just
     started listening on [listen_address]: right after the internal call to
