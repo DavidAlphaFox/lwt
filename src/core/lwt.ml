@@ -386,7 +386,7 @@ struct
 
 
   (* Promises proper. *)
-
+  (*定义Promise的状态盒子*)
   type ('a, 'u, 'c) promise = {
     mutable state : ('a, 'u, 'c) state;
   }
@@ -1289,11 +1289,11 @@ struct
     else
       run_in_resolution_loop (fun () ->
         run_callbacks callbacks result)
-
+  (*Promise 要被resolve了*)
   let resolve ?allow_deferring ?maximum_callback_nesting_depth p result =
     let Pending callbacks = p.state in
     let p = set_promise_state p result in
-
+    (* 执行Promise上的callback *)
     run_callbacks_or_defer_them
       ?allow_deferring ?maximum_callback_nesting_depth callbacks result;
 
@@ -1374,7 +1374,7 @@ struct
   let wakeup_result r result = wakeup_general "wakeup_result" r result
   let wakeup r v = wakeup_general "wakeup" r (Ok v)
   let wakeup_exn r exn = wakeup_general "wakeup_exn" r (Error exn)
-
+  (*wakeup_later的通用实现*)
   let wakeup_later_general api_function_name r result =
     let Internal p = to_internal_resolver r in
     let p = underlying p in
@@ -1387,7 +1387,7 @@ struct
     | Rejected _ ->
       Printf.ksprintf invalid_arg "Lwt.%s" api_function_name
 
-    | Pending _ ->
+    | Pending _ -> (*在pedding的状态下才能唤醒*)
       let result = state_of_result result in
       let State_may_have_changed p =
         resolve ~maximum_callback_nesting_depth:1 p result in
@@ -1550,8 +1550,8 @@ struct
     let cast_promise_list : 'a t list -> ('a, _, _) promise list = Obj.magic in
     Propagate_cancel_to_several (cast_promise_list ps)
 
-
-
+  (*构建一个全新的任务，有一个promise,一个reslover*)
+  (*wait 和 task是等效的*)
   let wait () =
     let p = new_pending ~how_to_cancel:Not_cancelable in
     to_public_promise p, to_public_resolver p
